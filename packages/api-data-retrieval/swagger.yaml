@@ -1,0 +1,338 @@
+swagger: "2.0"
+info:
+  version: "1.0.0"
+  title: "Data Retrieval API"
+  description: >
+    Microservice for retrieving event datasets and statistics for the SENG3011
+    Team Tango project.
+
+host: "127.0.0.1"
+schemes:
+  - "https"
+basePath: "/"
+
+consumes:
+  - "application/json"
+produces:
+  - "application/json"
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: >
+      Provide JWT token as: "Bearer <token>"
+
+tags:
+  - name: "General"
+    description: "Endpoints for docs and health checks."
+
+  - name: "Data Retrieval"
+    description: "Retrieve datasets, events, and statistics derived from stored event data."
+
+definitions:
+  ErrorResponse:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "EVENT_RETRIEVAL_INVALID_PARAMETERS"
+      message:
+        type: string
+        example: "start_date must be less than end_date."
+
+  ErrorResponseDatasetNotFound:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "DATASET_NOT_FOUND"
+      message:
+        type: string
+        example: "Invalid dataset id."
+
+  StatusResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        example: "ok"
+      timestamp:
+        type: string
+        format: date-time
+
+  TimeObject:
+    type: object
+    required: [timestamp, timezone]
+    properties:
+      timestamp:
+        type: string
+        format: date-time
+        example: "2026-03-01T00:00:00Z"
+      duration:
+        type: integer
+        example: 1
+      duration_unit:
+        type: string
+        example: "day"
+      timezone:
+        type: string
+        example: "AET"
+
+  AdageEvent:
+    type: object
+    required: [time_object, event_type, attribute]
+    properties:
+      event_id:
+        type: string
+        example: "evt_12465125"
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      event_type:
+        type: string
+        example: "stock_ohlc"
+      attribute:
+        type: object
+        additionalProperties: true
+        example:
+          symbol: "AAF"
+          exchange: "ASX"
+          open: 184.2
+          high: 187.9
+          low: 183.5
+          close: 186.7
+          volume: 58230000
+          currency: "AUD"
+
+  AdageData:
+    type: object
+    required: [dataset_id, name, data_source, dataset_type, time_object, events]
+    properties:
+      dataset_id:
+        type: string
+        example: "dataset_1313651"
+      name:
+        type: string
+        example: "Some Tech Stocks Q1 2026"
+      description:
+        type: string
+        example: "Data for listed tech companies"
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+      sector:
+        type: string
+        example: "Technology"
+      data_source:
+        type: string
+        example: "MarketStack"
+      dataset_type:
+        type: string
+        example: "daily_stock_data"
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      events:
+        type: array
+        items:
+          $ref: "#/definitions/AdageEvent"
+
+  EventsResponse:
+    type: object
+    required: [dataset]
+    properties:
+      retrieved:
+        type: integer
+        example: 124
+      dataset:
+        $ref: "#/definitions/AdageData"
+
+  EventStatsResponse:
+    type: object
+    properties:
+      total_events:
+        type: integer
+        example: 124
+      event_type_counts:
+        type: object
+        additionalProperties:
+          type: integer
+        example:
+          stock_ohlc: 120
+          price_spike: 4
+
+  DatasetListResponse:
+    type: array
+    items:
+      $ref: "#/definitions/AdageData"
+
+paths:
+  /v0/docs:
+    get:
+      tags: ["General"]
+      summary: Retrieve Swagger documentation
+      produces: ["text/html"]
+      responses:
+        200:
+          description: "Swagger documentation (rendered)"
+          schema:
+            type: string
+            example: "<!DOCTYPE html><html>...</html>"
+
+  /v0/status:
+    get:
+      tags: ["General"]
+      summary: "Check API health"
+      responses:
+        200:
+          description: "API status"
+          schema:
+            $ref: "#/definitions/StatusResponse"
+
+  /v1/datasets:
+    get:
+      tags: ["Data Retrieval"]
+      summary: "List all datasets"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: "List of datasets"
+          schema:
+            $ref: "#/definitions/DatasetListResponse"
+
+  /v1/datasets/{dataset_id}/events:
+    get:
+      tags: ["Data Retrieval"]
+      summary: "Retrieve events from a dataset (with parameters)"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+        - in: query
+          name: start_date
+          type: string
+          format: date
+          description: "Filter events from this datetime."
+        - in: query
+          name: end_date
+          type: string
+          format: date
+          description: "Filter events up to this datetime."
+        - in: query
+          name: sector
+          type: string
+          description: "Financial sector"
+        - in: query
+          name: companies
+          type: array
+          description: "Related companies list"
+          items:
+            type: string
+          collectionFormat: csv
+        - in: query
+          name: event_type
+          type: string
+          description: "Event type"
+        - in: query
+          name: limit
+          type: integer
+          description: "Maximum number of events"
+        - in: query
+          name: sort
+          type: string
+          description: "Sort parameter"
+        - in: query
+          name: order
+          type: string
+          description: "Sort order"
+      responses:
+        200:
+          description: "Filtered dataset"
+          schema:
+            $ref: "#/definitions/EventsResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+  /v1/datasets/{dataset_id}/events/stats:
+    get:
+      tags: ["Data Retrieval"]
+      summary: "Retrieve event statistics (summary) for a dataset"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+        - in: query
+          name: start_date
+          type: string
+          description: "Filter events from this datetime."
+          format: date
+        - in: query
+          name: end_date
+          type: string
+          description: "Filter events up to this datetime."
+          format: date
+        - in: query
+          name: companies
+          type: array
+          description: "Related companies list"
+          items:
+            type: string
+          collectionFormat: csv
+      responses:
+        200:
+          description: "Event summary statistics"
+          schema:
+            $ref: "#/definitions/EventStatsResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+  /v1/datasets/{dataset_id}/export:
+    get:
+      tags: ["Data Retrieval"]
+      summary: "Export dataset events as CSV (or something similar)"
+      security:
+        - BearerAuth: []
+      produces:
+        - "text/csv"
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Exported dataset"
+          schema:
+            type: string
+            example: "symbol,open,high,low,close,volume,timestamp\nAAF,184.2,187.9,183.5,186.7,58230000,2026-03-01T00:00:00Z\n"
+        400:
+          description: "Invalid export parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"

@@ -1,0 +1,423 @@
+swagger: "2.0"
+info:
+  version: "1.0.0"
+  title: "Data Collection API"
+  description: >
+    Microservice for collecting and managing event data from external sources for
+    the SENG3011 Team Tango project.
+
+host: "127.0.0.1"
+schemes:
+  - "https"
+basePath: "/"
+
+consumes:
+  - "application/json"
+produces:
+  - "application/json"
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: >
+      Provide JWT token as: "Bearer <token>"
+
+tags:
+  - name: "General"
+    description: "Endpoints for docs and health checks."
+
+  - name: "Data Collection"
+    description: "Create/manage datasets and fetch/manage events for a user."
+
+definitions:
+  ErrorResponseFetch:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "EVENT_FETCH_INVALID_PARAMETERS"
+      message:
+        type: string
+        example: "start_date must be less than end_date."
+
+  ErrorResponseDataset:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "DATASET_INVALID_PARAMETERS"
+      message:
+        type: string
+        example: "Invalid dataset name."
+
+  ErrorResponseDatasetNotFound:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "DATASET_NOT_FOUND"
+      message:
+        type: string
+        example: "Invalid dataset id."
+
+  StatusResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        example: "ok"
+      timestamp:
+        type: string
+        format: date-time
+
+  TimeObject:
+    type: object
+    required: [timestamp, timezone]
+    properties:
+      timestamp:
+        type: string
+        format: date-time
+        example: "2026-03-01T00:00:00Z"
+      duration:
+        type: integer
+        example: 1
+      duration_unit:
+        type: string
+        example: "day"
+      timezone:
+        type: string
+        example: "AET"
+
+  AdageEvent:
+    type: object
+    required: [time_object, event_type, attribute]
+    properties:
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      event_type:
+        type: string
+        example: "stock_ohlc"
+      attribute:
+        type: object
+        additionalProperties: true
+        example:
+          symbol: "AAF"
+          exchange: "BBD"
+          open: 184.2
+          high: 187.9
+          low: 183.5
+          close: 186.7
+          volume: 58230000
+          currency: "AUD"
+
+  AdageData:
+    type: object
+    required: [dataset_id, name, data_source, dataset_type, time_object, events]
+    properties:
+      dataset_id:
+        type: string
+        example: "dataset_1313651"
+      name:
+        type: string
+        example: "Some Tech Stocks Q1 2026"
+      description:
+        type: string
+        example: "Data for listed tech companies"
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+      sector:
+        type: string
+        example: "Technology"
+      data_source:
+        type: string
+        example: "MarketStack"
+      dataset_type:
+        type: string
+        example: "daily_stock_data"
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      events:
+        type: array
+        items:
+          $ref: "#/definitions/AdageEvent"
+
+  EventsRequest:
+    type: object
+    properties:
+      start_date:
+        type: string
+        format: date
+        example: "2026-02-01"
+      end_date:
+        type: string
+        format: date
+        example: "2026-03-01"
+      sector:
+        type: string
+        example: "Financial"
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+
+  FetchEventsResponse:
+    type: object
+    required: [count, dataset]
+    properties:
+      count:
+        type: integer
+        example: 124
+      dataset:
+        $ref: "#/definitions/AdageData"
+
+  RemoveEventsResponse:
+    type: object
+    required: [count]
+    properties:
+      count:
+        type: integer
+        example: 124
+
+  DatasetCreateRequest:
+    type: object
+    required: [name]
+    properties:
+      name:
+        type: string
+        example: "Some Tech Stocks Q1 2026"
+      description:
+        type: string
+        example: "Data for listed tech companies"
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+      sector:
+        type: string
+        example: "Technology"
+
+  DatasetUpdateRequest:
+    type: object
+    properties:
+      name:
+        type: string
+        example: "Other name"
+      description:
+        type: string
+        example: "Other description"
+      companies:
+        type: array
+        items:
+          type: string
+      sector:
+        type: string
+        example: "Financial"
+
+  DatasetRemoveResponse:
+    type: object
+    required: [count]
+    properties:
+      count:
+        type: integer
+        example: 1
+
+  DatasetListResponse:
+    type: array
+    items:
+      $ref: "#/definitions/AdageData"
+
+paths:
+  /v0/docs:
+    get:
+      tags: ["General"]
+      summary: "Retrieve Swagger documentation"
+      produces: ["text/html"]
+      responses:
+        200:
+          description: "Swagger documentation (rendered)"
+          schema:
+            type: string
+            example: "<!DOCTYPE html><html>...</html>"
+
+  /v0/status:
+    get:
+      tags: ["General"]
+      summary: "Check API health"
+      responses:
+        200:
+          description: "API status"
+          schema:
+            $ref: "#/definitions/StatusResponse"
+
+  /v1/datasets:
+    post:
+      tags: ["Data Collection"]
+      summary: "Create a new dataset"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/DatasetCreateRequest"
+      responses:
+        201:
+          description: "Dataset created"
+          schema:
+            $ref: "#/definitions/AdageData"
+        400:
+          description: "Invalid dataset parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponseDataset"
+
+    get:
+      tags: ["Data Collection"]
+      summary: "List all datasets"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: "List of datasets"
+          schema:
+            $ref: "#/definitions/DatasetListResponse"
+
+  /v1/datasets/{dataset_id}:
+    get:
+      tags: ["Data Collection"]
+      summary: "Retrieve a dataset (with events)"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Dataset"
+          schema:
+            $ref: "#/definitions/AdageData"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+    put:
+      tags: ["Data Collection"]
+      summary: "Modify a dataset"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/DatasetUpdateRequest"
+      responses:
+        200:
+          description: "Dataset updated"
+          schema:
+            $ref: "#/definitions/AdageData"
+        400:
+          description: "Invalid dataset parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponseDataset"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+    delete:
+      tags: ["Data Collection"]
+      summary: "Remove a dataset"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Dataset removed"
+          schema:
+            $ref: "#/definitions/DatasetRemoveResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+  /v1/datasets/{dataset_id}/events/fetch:
+    post:
+      tags: ["Data Collection"]
+      summary: "Fetch new events from external APIs into an existing dataset (as ADAGE dataset)"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/EventsRequest"
+      responses:
+        200:
+          description: "Events fetched successfully"
+          schema:
+            $ref: "#/definitions/FetchEventsResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponseFetch"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+  /v1/datasets/{dataset_id}/events/remove:
+    delete:
+      tags: ["Data Collection"]
+      summary: "Remove events from an existing dataset (by parameters, similar to fetch)"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: false
+          schema:
+            $ref: "#/definitions/EventsRequest"
+      responses:
+        200:
+          description: "Events removed successfully"
+          schema:
+            $ref: "#/definitions/RemoveEventsResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponseFetch"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"

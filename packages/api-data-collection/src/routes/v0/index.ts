@@ -7,8 +7,8 @@ const router = Router();
 
 const swaggerDoc = yaml.load(path.resolve(__dirname, "../../../swagger.yaml"));
 
-router.get("/docs", swaggerui.setup(swaggerDoc));
 router.use("/docs", swaggerui.serve);
+router.get("/docs", swaggerui.setup(swaggerDoc));
 
 router.get("/status", async (req: Request, res: Response) => {
   try {

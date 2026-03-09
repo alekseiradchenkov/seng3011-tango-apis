@@ -5,12 +5,10 @@ import * as path from "path";
 
 const router = Router();
 
-const swaggerDocument = yaml.load(
-  path.resolve(__dirname, "../../../swagger.yaml"),
-);
+const swaggerDoc = yaml.load(path.resolve(__dirname, "../../../swagger.yaml"));
 
+router.get("/docs", swaggerui.setup(swaggerDoc));
 router.use("/docs", swaggerui.serve);
-router.get("/docs", swaggerui.setup(swaggerDocument));
 
 router.get("/status", async (req: Request, res: Response) => {
   try {
@@ -19,8 +17,10 @@ router.get("/status", async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("An error ocurred:", error);
-    res.status(500).json(error);
+    res.status(503).json({
+      error: "UNREACHABLE",
+      message: "Service is unreachable.",
+    });
   }
 });
 

@@ -1,17 +1,29 @@
 import * as express from "express";
-import { Request, Response } from "express";
+import routes from "./routes";
 
-const app: express.Application = express();
-const port: number = 3000;
+const app = express();
 
-app.get("/", (req: Request, res: Response) => {
-  return res.send("Hello World");
-});
+app.use(express.json());
 
-app.get("/users/:name", (req: Request, res: Response) => {
-  return res.send(`Hello ${req.params.name}`);
-});
+app.use("/", routes);
 
-app.listen(port, () => {
-  console.log(`Server listening at port: ${port}`);
+app.use(
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.status(404).send();
+  },
+);
+
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    res.status(err.status || 500).send();
+  },
+);
+
+app.listen(3000, () => {
+  console.log(`Server running on http://localhost:3000`);
 });

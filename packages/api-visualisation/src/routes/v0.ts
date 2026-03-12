@@ -5,7 +5,7 @@ import * as path from "path";
 
 const router = Router();
 
-const swaggerDoc = yaml.load(path.resolve(__dirname, "../../../swagger.yaml"));
+const swaggerDoc = yaml.load(path.resolve(__dirname, "../../swagger.yaml"));
 
 router.use("/docs", swaggerui.serve);
 router.get("/docs", swaggerui.setup(swaggerDoc));

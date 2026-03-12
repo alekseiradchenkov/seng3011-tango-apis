@@ -4,6 +4,6 @@ module.exports = {
   maxWorkers: 1,
 
   transform: {
-    "^.+\\.(ts|tsx|js)$": "ts-jest",
+    "^.+\\.(ts|tsx|js)$": ["ts-jest", { diagnostics: false }],
   },
 };

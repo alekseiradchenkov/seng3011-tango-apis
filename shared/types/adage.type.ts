@@ -21,7 +21,7 @@ export type AdageAttributes = Record<string, AdageAttribute>;
 export type AdageEvent = {
   time_object: AdageTimeObject;
   event_type: string;
-  attributes: AdageAttributes;
+  attribute: AdageAttributes;
 };
 
 export type AdageEvents = AdageEvent[];

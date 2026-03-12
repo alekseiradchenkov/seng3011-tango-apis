@@ -32,27 +32,16 @@ tags:
     description: "Create/manage datasets and fetch/manage events for a user."
 
 definitions:
-  ErrorResponseFetch:
-    type: object
-    required: [error, message]
-    properties:
-      error:
-        type: string
-        example: "EVENT_FETCH_INVALID_PARAMETERS"
-      message:
-        type: string
-        example: "start_date must be less than end_date."
-
   ErrorResponseDataset:
     type: object
     required: [error, message]
     properties:
       error:
         type: string
-        example: "DATASET_INVALID_PARAMETERS"
+        example: "INVALID_PARAMETERS"
       message:
         type: string
-        example: "Invalid dataset name."
+        example: "Invalid request parameter: name."
 
   ErrorResponseDatasetNotFound:
     type: object
@@ -74,6 +63,7 @@ definitions:
       timestamp:
         type: string
         format: date-time
+        example: "2026-03-11T12:00:00.000Z"
 
   TimeObject:
     type: object
@@ -81,8 +71,7 @@ definitions:
     properties:
       timestamp:
         type: string
-        format: date-time
-        example: "2026-03-01T00:00:00Z"
+        example: "2026-03-01 00:00:00"
       duration:
         type: integer
         example: 1
@@ -91,11 +80,36 @@ definitions:
         example: "day"
       timezone:
         type: string
-        example: "AET"
+        example: "UTC"
 
   AdageEvent:
     type: object
     required: [time_object, event_type, attribute]
+    example:
+      time_object:
+        timestamp: "2026-03-01 00:00:00"
+        timezone: "UTC"
+        duration: 1
+        duration_unit: "day"
+      event_type: "stock_ohlc"
+      attribute:
+        symbol: "AAPL.XNAS"
+        name: "Apple Inc"
+        exchange: "NASDAQ"
+        exchange_code: "XNAS"
+        open: 184.2
+        high: 187.9
+        low: 183.5
+        close: 186.7
+        volume: 58230000
+        adj_open: 184.2
+        adj_high: 187.9
+        adj_low: 183.5
+        adj_close: 186.7
+        adj_volume: 58230000
+        split_factor: 1.0
+        dividend: 0.0
+        currency: "USD"
     properties:
       time_object:
         $ref: "#/definitions/TimeObject"
@@ -105,37 +119,46 @@ definitions:
       attribute:
         type: object
         additionalProperties: true
-        example:
-          symbol: "AAF"
-          exchange: "BBD"
-          open: 184.2
-          high: 187.9
-          low: 183.5
-          close: 186.7
-          volume: 58230000
-          currency: "AUD"
 
   AdageData:
     type: object
-    required: [dataset_id, name, data_source, dataset_type, time_object, events]
+    required: [dataset_id, data_source, dataset_type, time_object, events]
+    example:
+      dataset_id: "dataset_1741651200000_1"
+      data_source: "MarketStack"
+      dataset_type: "daily_stock_data"
+      time_object:
+        timestamp: "2026-03-11T12:00:00.000Z"
+        timezone: "UTC"
+      events:
+        - time_object:
+            timestamp: "2026-03-01 00:00:00"
+            timezone: "UTC"
+            duration: 1
+            duration_unit: "day"
+          event_type: "stock_ohlc"
+          attribute:
+            symbol: "AAPL.XNAS"
+            name: "Apple Inc"
+            exchange: "NASDAQ"
+            exchange_code: "XNAS"
+            open: 184.2
+            high: 187.9
+            low: 183.5
+            close: 186.7
+            volume: 58230000
+            adj_open: 184.2
+            adj_high: 187.9
+            adj_low: 183.5
+            adj_close: 186.7
+            adj_volume: 58230000
+            split_factor: 1.0
+            dividend: 0.0
+            currency: "USD"
     properties:
       dataset_id:
         type: string
-        example: "dataset_1313651"
-      name:
-        type: string
-        example: "Some Tech Stocks Q1 2026"
-      description:
-        type: string
-        example: "Data for listed tech companies"
-      companies:
-        type: array
-        items:
-          type: string
-        example: ["AAF", "BBD"]
-      sector:
-        type: string
-        example: "Technology"
+        example: "dataset_1741651200000_1"
       data_source:
         type: string
         example: "MarketStack"
@@ -152,22 +175,52 @@ definitions:
   EventsRequest:
     type: object
     properties:
-      start_date:
-        type: string
-        format: date
-        example: "2026-02-01"
-      end_date:
-        type: string
-        format: date
-        example: "2026-03-01"
-      sector:
-        type: string
-        example: "Financial"
-      companies:
+      symbols:
         type: array
         items:
           type: string
-        example: ["AAF", "BBD"]
+        example: ["AAPL.XNAS", "MSFT.XNAS"]
+      exchange:
+        type: string
+        example: "XNAS"
+      date_from:
+        type: string
+        format: date
+        example: "2026-02-01"
+      date_to:
+        type: string
+        format: date
+        example: "2026-03-01"
+      sort:
+        type: string
+        enum: ["ASC", "DESC"]
+        example: "DESC"
+      limit:
+        type: integer
+        example: 100
+      offset:
+        type: integer
+        example: 0
+
+  RemoveEventsRequest:
+    type: object
+    properties:
+      symbols:
+        type: array
+        items:
+          type: string
+        example: ["AAPL.XNAS", "MSFT.XNAS"]
+      exchange:
+        type: string
+        example: "XNAS"
+      date_from:
+        type: string
+        format: date
+        example: "2026-02-01"
+      date_to:
+        type: string
+        format: date
+        example: "2026-03-01"
 
   FetchEventsResponse:
     type: object
@@ -197,14 +250,14 @@ definitions:
       description:
         type: string
         example: "Data for listed tech companies"
-      companies:
+      symbols:
         type: array
         items:
           type: string
-        example: ["AAF", "BBD"]
-      sector:
+        example: ["AAPL.XNAS", "MSFT.XNAS"]
+      exchange:
         type: string
-        example: "Technology"
+        example: "XNAS"
 
   DatasetUpdateRequest:
     type: object
@@ -215,13 +268,14 @@ definitions:
       description:
         type: string
         example: "Other description"
-      companies:
+      symbols:
         type: array
         items:
           type: string
-      sector:
+        example: ["AAPL.XNAS", "MSFT.XNAS"]
+      exchange:
         type: string
-        example: "Financial"
+        example: "XNAS"
 
   DatasetRemoveResponse:
     type: object
@@ -333,10 +387,6 @@ paths:
           description: "Dataset updated"
           schema:
             $ref: "#/definitions/AdageData"
-        400:
-          description: "Invalid dataset parameters"
-          schema:
-            $ref: "#/definitions/ErrorResponseDataset"
         404:
           description: "Dataset not found"
           schema:
@@ -383,10 +433,6 @@ paths:
           description: "Events fetched successfully"
           schema:
             $ref: "#/definitions/FetchEventsResponse"
-        400:
-          description: "Invalid parameters"
-          schema:
-            $ref: "#/definitions/ErrorResponseFetch"
         404:
           description: "Dataset not found"
           schema:
@@ -407,16 +453,12 @@ paths:
           name: body
           required: false
           schema:
-            $ref: "#/definitions/EventsRequest"
+            $ref: "#/definitions/RemoveEventsRequest"
       responses:
         200:
           description: "Events removed successfully"
           schema:
             $ref: "#/definitions/RemoveEventsResponse"
-        400:
-          description: "Invalid parameters"
-          schema:
-            $ref: "#/definitions/ErrorResponseFetch"
         404:
           description: "Dataset not found"
           schema:

@@ -13,7 +13,6 @@ router.get("/docs", swaggerui.setup(swaggerDoc));
 router.get("/status", async (req: Request, res: Response) => {
   try {
     res.status(200).json({
-      status: "ok",
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -23,5 +22,3 @@ router.get("/status", async (req: Request, res: Response) => {
     });
   }
 });
-
-export default router;

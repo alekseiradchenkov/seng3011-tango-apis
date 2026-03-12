@@ -1,4 +1,4 @@
-import { AdageEvent, AdageTimeObject, AnyObject } from "./adage.type";
+import { AdageEvent, AdageTimeObject, AnyValue } from "./adage.type";
 
 export type DatasetMetadata = {
   data_source: string;
@@ -8,10 +8,18 @@ export type DatasetMetadata = {
   user_id: string;
   name?: string;
   description?: string;
-  filters?: Record<string, AnyObject>;
+  filters?: DatasetFilters;
 };
 
 export type DatasetStore = {
   dataset_id: string;
   events: AdageEvent[];
 };
+
+export type DatasetFilters = Record<string, AnyValue>;
+
+/* user: UserDatasetMetadata object...*/
+export type DatasetMetadataTable = Record<string, DatasetMetadata[]>;
+
+/* dataset_id: DataStore object... */
+export type DatasetStores = Record<string, DatasetStore>;

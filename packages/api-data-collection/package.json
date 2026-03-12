@@ -14,11 +14,11 @@
     "tsc": "tsc --project tsconfig.json",
     "lint": "eslint 'src/**/*.{ts,js}'",
     "lint-fix": "eslint --fix 'src/**/*.{ts,js}'",
-    "start": "ts-node -T src/server.ts",
+    "start": "bash -c 'set -a; source .env; set +a; ts-node -T src/server.ts'",
     "cleanup-sync-request": "pkill -f node_modules/sync-rpc/lib/worker.js > /dev/null 2>&1",
     "posttest": "npm run cleanup-sync-request || true",
     "ts-node-coverage": "nyc --reporter=text --reporter=lcov ts-node -T src/server.ts",
-    "dev": "ts-node-dev -T src/server.ts"
+    "dev": "bash -c 'set -a; source .env; set +a; ts-node-dev -T src/server.ts'"
   },
   "dependencies": {
     "cors": "^2.8.6",

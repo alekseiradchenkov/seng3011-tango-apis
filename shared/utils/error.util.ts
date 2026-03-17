@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AdageData, AnyValue } from "../types/adage.type";
-import { DatasetMetadata } from "../types/db.type";
+import { DatasetMetadata } from "../../shared/types/db.type";
 
 export function assertDatasetExists(
   res: Response,

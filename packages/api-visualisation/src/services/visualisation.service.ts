@@ -7,16 +7,7 @@ import {
 import {
   ChartMetadata,
   ChartMetadataTable,
-  DatasetFilters,
-  DatasetMetadata,
-  DatasetMetadataTable,
 } from "../../../../shared/types/db.type";
-
-import {
-  DatasetCreateInput,
-  DatasetEventsQuery,
-  DatasetPagination,
-} from "../../../../shared/types/datasets.type";
 
 import {
   getChartMetadataTable,
@@ -25,13 +16,50 @@ import {
   getMetadataTable,
   setChartMetadataTable,
   setChartStore,
-  setDataStore,
-  setMetadataTable,
 } from "../../../../shared/db/data.db";
 
 import { Chart, ChartCreateInput } from "../../../../shared/types/chart.type";
 
 import { nowTimeObject } from "../../../../shared/utils/time.util";
+import { EvenTrendInput, EventSummary, EventTrend } from "../types/events.type";
+
+export function getEventsSummary(datasetId: string): EventSummary | null {
+  const dataStores = getDataStores();
+
+  const dataset = dataStores[datasetId];
+
+  if (!dataset) return null;
+
+  const summary: EventSummary = {
+    dataset_id: datasetId,
+    recent_trends: dataset.events,
+  };
+  
+  return summary;
+}
+
+export function getEventTrends(input: EvenTrendInput): EventTrend | null {
+  const dataStores = getDataStores();
+  const dataset = dataStores[input.dataset_id];
+  if (!dataset) return null;
+
+  const filteredEvents = dataset.events.filter((event) => {
+    const eventDate = new Date(event.time_object.timestamp);
+    const fromDate = input.date_from ? new Date(input.date_from) : null;
+    const toDate = input.date_to ? new Date(input.date_to) : null;
+
+    return (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
+  });
+
+  const filteredDataset = { ...dataset, events: filteredEvents };
+
+  const trend: EventTrend = {
+    event_count: filteredEvents.length,
+    dataset: filteredDataset,
+  };
+
+  return trend;
+}
 
 export function createChart(
   userId: string,
@@ -118,6 +146,6 @@ export function deleteChart(
   if (chart) {
     delete charts[chartId];
   }
-  
+
   return true;
 }

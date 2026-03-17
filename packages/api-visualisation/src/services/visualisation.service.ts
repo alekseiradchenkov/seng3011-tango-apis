@@ -118,5 +118,6 @@ export function deleteChart(
   if (chart) {
     delete charts[chartId];
   }
+  
   return true;
 }

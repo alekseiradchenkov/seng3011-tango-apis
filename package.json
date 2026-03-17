@@ -1,0 +1,24 @@
+{
+  "name": "seng3011-apis",
+  "version": "1.0.0",
+  "description": "SENG3011 Team Tango - data collection, data retrieval and visualisation microservices.",
+  "repository": {
+    "type": "git",
+    "url": "git@uni_github.com:alekseiradchenkov/seng3011-tango-apis.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "dependencies": {
+    "aws-jwt-verify": "^5.1.1",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "ts-jest": "^29.4.6"
+  }
+}

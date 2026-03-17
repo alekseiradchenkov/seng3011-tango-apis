@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AdageData, AnyValue } from "../types/adage.type";
-import { DatasetMetadata } from "../../shared/types/db.type";
+import { DatasetMetadata } from "../types/db.type";
 
 export function assertDatasetExists(
   res: Response,
@@ -23,6 +23,18 @@ export function assertDatasetCount(res: Response, count: number): boolean {
     res.status(404).json({
       error: "DATASET_NOT_FOUND",
       message: `Invalid dataset id.`,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+export function assertChartCount(res: Response, deleted: boolean): boolean {
+  if (!deleted) {
+    res.status(404).json({
+      error: "CHART_NOT_FOUND",
+      message: `Invalid chart id.`,
     });
     return false;
   }

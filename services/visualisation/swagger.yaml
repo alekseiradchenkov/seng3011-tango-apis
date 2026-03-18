@@ -1,0 +1,535 @@
+swagger: "2.0"
+info:
+  version: "1.0.0"
+  title: "Visualisation API"
+  description: >
+    Microservice for visualising event data, derived trends, and charts for the
+    SENG3011 Team Tango project.
+
+host: "127.0.0.1"
+schemes:
+  - "https"
+basePath: "/"
+
+consumes:
+  - "application/json"
+produces:
+  - "application/json"
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: >
+      Provide JWT token as: "Bearer <token>"
+
+tags:
+  - name: "General"
+    description: "Endpoints for docs and health checks."
+
+  - name: "Visualisation"
+    description: "Retrieve summaries, trends, charts, and rendered chart output."
+
+definitions:
+  ErrorResponse:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "EVENT_VISUAL_INVALID_PARAMETERS"
+      message:
+        type: string
+        example: "time_period must be a positive integer."
+
+  ErrorResponseDatasetNotFound:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "DATASET_NOT_FOUND"
+      message:
+        type: string
+        example: "Invalid dataset id."
+
+  ErrorResponseChartNotFound:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "CHART_NOT_FOUND"
+      message:
+        type: string
+        example: "Invalid chart id."
+
+  StatusResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        example: "ok"
+      timestamp:
+        type: string
+        format: date-time
+
+  TimeObject:
+    type: object
+    required: [timestamp, timezone]
+    properties:
+      timestamp:
+        type: string
+        format: date-time
+        example: "2026-03-01T00:00:00Z"
+      duration:
+        type: integer
+        example: 1
+      duration_unit:
+        type: string
+        example: "day"
+      timezone:
+        type: string
+        example: "AET"
+
+  AdageEvent:
+    type: object
+    required: [time_object, event_type, attribute]
+    properties:
+      event_id:
+        type: string
+        example: "evt_12465125"
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      event_type:
+        type: string
+        example: "price_trend"
+      attribute:
+        type: object
+        additionalProperties: true
+        example:
+          sector: "Financial"
+          companies: ["AAF", "BBD"]
+          trend: "up"
+          change: 12
+          percentage_change: 1.3
+
+  AdageData:
+    type: object
+    required: [dataset_id, name, data_source, dataset_type, time_object, events]
+    properties:
+      dataset_id:
+        type: string
+        example: "dataset_126321361"
+      name:
+        type: string
+        example: "Tech Stocks Q1 2026 - Trends"
+      description:
+        type: string
+        example: "Derived trend events for listed tech companies"
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+      sector:
+        type: string
+        example: "Technology"
+      data_source:
+        type: string
+        example: "TANGO-Visualization"
+      dataset_type:
+        type: string
+        example: "derived_trends"
+      time_object:
+        $ref: "#/definitions/TimeObject"
+      events:
+        type: array
+        items:
+          $ref: "#/definitions/AdageEvent"
+
+  EventSummaryResponse:
+    type: object
+    properties:
+      dataset_id:
+        type: string
+        example: "dataset_1313651"
+      sectors:
+        type: array
+        items:
+          type: string
+        example: ["Financial", "Energy"]
+      companies:
+        type: array
+        items:
+          type: string
+        example: ["AAF", "BBD"]
+      recent_trends:
+        type: array
+        items:
+          $ref: "#/definitions/AdageEvent"
+
+  EventTrendsResponse:
+    type: object
+    required: [dataset]
+    properties:
+      event_count:
+        type: integer
+        example: 14
+      dataset:
+        $ref: "#/definitions/AdageData"
+
+  ChartDataPoint:
+    type: object
+    required: [x, y]
+    properties:
+      x:
+        description: "X-axis value"
+        example: "2026-02-01T00:00:00Z"
+      y:
+        description: "Y-axis value"
+        example: 184.2
+
+  ChartSeries:
+    type: object
+    required: [label, data]
+    properties:
+      label:
+        type: string
+        description: "Series label"
+        example: "AAF"
+      data:
+        type: array
+        items:
+          $ref: "#/definitions/ChartDataPoint"
+        example:
+          - x: "2026-02-01T00:00:00Z"
+            y: 184.2
+          - x: "2026-02-02T00:00:00Z"
+            y: 186.7
+          - x: "2026-02-03T00:00:00Z"
+            y: 183.5
+          - x: "2026-02-04T00:00:00Z"
+            y: 188.1
+
+  Chart:
+    type: object
+    required: [chart_id, type, dataset_id, x_axis, y_axis, series]
+    properties:
+      chart_id:
+        type: string
+        example: "chr_3146124"
+      type:
+        type: string
+        description: "Chart type"
+        example: "line"
+      dataset_id:
+        type: string
+        example: "dataset_1252362"
+      x_axis:
+        type: string
+        description: "Field path for the x-axis."
+        example: "time_object.timestamp"
+      y_axis:
+        type: string
+        description: "Field path for the y-axis."
+        example: "attribute.close"
+      title:
+        type: string
+        example: "AAF Close Price"
+      series:
+        type: array
+        description: "Chart data"
+        items:
+          $ref: "#/definitions/ChartSeries"
+        example:
+          - label: "AAF"
+            data:
+              - x: "2026-02-01T00:00:00Z"
+                y: 184.2
+              - x: "2026-02-02T00:00:00Z"
+                y: 186.7
+              - x: "2026-02-03T00:00:00Z"
+                y: 183.5
+              - x: "2026-02-04T00:00:00Z"
+                y: 188.1
+          - label: "BBD"
+            data:
+              - x: "2026-02-01T00:00:00Z"
+                y: 52.3
+              - x: "2026-02-02T00:00:00Z"
+                y: 53.1
+              - x: "2026-02-03T00:00:00Z"
+                y: 51.8
+              - x: "2026-02-04T00:00:00Z"
+                y: 54.0
+
+  ChartCreateRequest:
+    type: object
+    required: [type, dataset_id, x_axis, y_axis]
+    properties:
+      type:
+        type: string
+        description: "Chart type"
+        example: "line"
+      dataset_id:
+        type: string
+        example: "dataset_13613623"
+      x_axis:
+        type: string
+        description: "Field path for the x-axis."
+        example: "time_object.timestamp"
+      y_axis:
+        type: string
+        description: "Field path for the y-axis."
+        example: "attribute.close"
+      title:
+        type: string
+        example: "AAF Close Price"
+      series:
+        type: array
+        description: "Chart data"
+        items:
+          $ref: "#/definitions/ChartSeries"
+        example:
+          - label: "AAF"
+            data:
+              - x: "2026-02-01T00:00:00Z"
+                y: 184.2
+              - x: "2026-02-02T00:00:00Z"
+                y: 186.7
+              - x: "2026-02-03T00:00:00Z"
+                y: 183.5
+              - x: "2026-02-04T00:00:00Z"
+                y: 188.1
+          - label: "BBD"
+            data:
+              - x: "2026-02-01T00:00:00Z"
+                y: 52.3
+              - x: "2026-02-02T00:00:00Z"
+                y: 53.1
+              - x: "2026-02-03T00:00:00Z"
+                y: 51.8
+              - x: "2026-02-04T00:00:00Z"
+                y: 54.0
+
+  ChartRemoveResponse:
+    type: object
+    required: [count]
+    properties:
+      count:
+        type: integer
+        example: 1
+
+  ChartListResponse:
+    type: array
+    items:
+      $ref: "#/definitions/Chart"
+
+paths:
+  /v0/docs:
+    get:
+      tags: ["General"]
+      summary: "Retrieve Swagger documentation"
+      produces: ["text/html"]
+      responses:
+        200:
+          description: "Swagger documentation (rendered)"
+          schema:
+            type: string
+            example: "<!DOCTYPE html><html>...</html>"
+
+  /v0/status:
+    get:
+      tags: ["General"]
+      summary: "Check API health"
+      responses:
+        200:
+          description: "API status"
+          schema:
+            $ref: "#/definitions/StatusResponse"
+
+  /v1/events/summary:
+    get:
+      tags: ["Visualisation"]
+      summary: "Retrieve events summary"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: dataset_id
+          type: string
+          example: "dataset_1313651"
+      responses:
+        200:
+          description: "Events summary"
+          schema:
+            $ref: "#/definitions/EventSummaryResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+  /v1/events/trends:
+    get:
+      tags: ["Visualisation"]
+      summary: "Retrieve trend events as an ADAGE dataset"
+      description: >
+        Returns a derived trends dataset
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: dataset_id
+          type: string
+          example: "dataset_1313651"
+        - in: query
+          name: sector
+          type: string
+          example: "Financial"
+        - in: query
+          name: start_date
+          type: string
+          format: date
+          example: "2026-02-01"
+        - in: query
+          name: time_period
+          type: integer
+          example: 14
+        - in: query
+          name: companies
+          type: array
+          items:
+            type: string
+          collectionFormat: csv
+      responses:
+        200:
+          description: "Derived trend dataset"
+          schema:
+            $ref: "#/definitions/EventTrendsResponse"
+        400:
+          description: "Invalid parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
+  /v1/charts:
+    post:
+      tags: ["Visualisation"]
+      summary: "Create a new chart"
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/ChartCreateRequest"
+      responses:
+        201:
+          description: "Chart created"
+          schema:
+            $ref: "#/definitions/Chart"
+        400:
+          description: "Invalid chart parameters"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+    get:
+      tags: ["Visualisation"]
+      summary: "List all charts"
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: "List of charts"
+          schema:
+            $ref: "#/definitions/ChartListResponse"
+
+  /v1/charts/{chart_id}:
+    get:
+      tags: ["Visualisation"]
+      summary: "Retrieve a chart by ID"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: chart_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Chart details"
+          schema:
+            $ref: "#/definitions/Chart"
+        404:
+          description: "Chart not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseChartNotFound"
+
+    delete:
+      tags: ["Visualisation"]
+      summary: "Remove a chart"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: chart_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Chart removed"
+          schema:
+            $ref: "#/definitions/ChartRemoveResponse"
+        404:
+          description: "Chart not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseChartNotFound"
+
+  /v1/charts/{chart_id}/render:
+    get:
+      tags: ["Visualisation"]
+      summary: "Render a chart as an interactive HTML page"
+      security:
+        - BearerAuth: []
+      produces:
+        - "text/html"
+      parameters:
+        - name: chart_id
+          in: path
+          required: true
+          type: string
+        - in: query
+          name: width
+          type: integer
+          description: "Rendered chart width"
+          example: 900
+        - in: query
+          name: height
+          type: integer
+          description: "Rendered chart height"
+          example: 500
+        - in: query
+          name: theme
+          type: string
+          description: "Chart style"
+          example: "light"
+      responses:
+        200:
+          description: "Rendered HTML chart"
+          schema:
+            type: string
+            example: "<!DOCTYPE html><html> </html>"
+        404:
+          description: "Chart not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseChartNotFound"

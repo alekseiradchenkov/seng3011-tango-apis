@@ -109,7 +109,7 @@ definitions:
 
   AdageData:
     type: object
-    required: [dataset_id, name, data_source, dataset_type, time_object, events]
+    required: [dataset_id, data_source, dataset_type, time_object, events]
     properties:
       dataset_id:
         type: string
@@ -120,20 +120,12 @@ definitions:
       description:
         type: string
         example: "Data for listed tech companies"
-      companies:
-        type: array
-        items:
-          type: string
-        example: ["AAF", "BBD"]
-      sector:
-        type: string
-        example: "Technology"
       data_source:
         type: string
-        example: "MarketStack"
+        example: "YahooFinance"
       dataset_type:
         type: string
-        example: "daily_stock_data"
+        example: "daily_stock_ohlc_data"
       time_object:
         $ref: "#/definitions/TimeObject"
       events:
@@ -205,6 +197,27 @@ paths:
           schema:
             $ref: "#/definitions/DatasetListResponse"
 
+  /v1/datasets/{dataset_id}:
+    get:
+      tags: ["Data Retrieval"]
+      summary: "Retrieve a single dataset with its first 100 events"
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: "Dataset with events"
+          schema:
+            $ref: "#/definitions/AdageData"
+        404:
+          description: "Dataset not found"
+          schema:
+            $ref: "#/definitions/ErrorResponseDatasetNotFound"
+
   /v1/datasets/{dataset_id}/events:
     get:
       tags: ["Data Retrieval"]
@@ -220,39 +233,37 @@ paths:
           name: start_date
           type: string
           format: date
-          description: "Filter events from this datetime."
+          description: "Include events on or after this date (YYYY-MM-DD)."
         - in: query
           name: end_date
           type: string
           format: date
-          description: "Filter events up to this datetime."
-        - in: query
-          name: sector
-          type: string
-          description: "Financial sector"
+          description: "Include events on or before this date (YYYY-MM-DD)."
         - in: query
           name: companies
           type: array
-          description: "Related companies list"
+          description: "Filter by symbol or company name (CSV or repeated param)."
           items:
             type: string
           collectionFormat: csv
         - in: query
           name: event_type
           type: string
-          description: "Event type"
+          description: "Filter by event type (e.g. stock_ohlc)."
         - in: query
           name: limit
           type: integer
-          description: "Maximum number of events"
+          description: "Maximum number of events to return (default 100, max 1000)."
         - in: query
           name: sort
           type: string
-          description: "Sort parameter"
+          enum: ["time"]
+          description: "Sort field (currently only 'time' is supported)."
         - in: query
           name: order
           type: string
-          description: "Sort order"
+          enum: ["ASC", "DESC"]
+          description: "Sort order (default DESC)."
       responses:
         200:
           description: "Filtered dataset"
@@ -281,20 +292,24 @@ paths:
         - in: query
           name: start_date
           type: string
-          description: "Filter events from this datetime."
+          description: "Include events on or after this date (YYYY-MM-DD)."
           format: date
         - in: query
           name: end_date
           type: string
-          description: "Filter events up to this datetime."
+          description: "Include events on or before this date (YYYY-MM-DD)."
           format: date
         - in: query
           name: companies
           type: array
-          description: "Related companies list"
+          description: "Filter by symbol or company name (CSV or repeated param)."
           items:
             type: string
           collectionFormat: csv
+        - in: query
+          name: event_type
+          type: string
+          description: "Filter by event type (e.g. stock_ohlc)."
       responses:
         200:
           description: "Event summary statistics"
@@ -312,7 +327,7 @@ paths:
   /v1/datasets/{dataset_id}/export:
     get:
       tags: ["Data Retrieval"]
-      summary: "Export dataset events as CSV (or something similar)"
+      summary: "Export dataset events as CSV"
       security:
         - BearerAuth: []
       produces:
@@ -322,6 +337,36 @@ paths:
           in: path
           required: true
           type: string
+        - in: query
+          name: start_date
+          type: string
+          format: date
+          description: "Include events on or after this date (YYYY-MM-DD)."
+        - in: query
+          name: end_date
+          type: string
+          format: date
+          description: "Include events on or before this date (YYYY-MM-DD)."
+        - in: query
+          name: companies
+          type: array
+          description: "Filter by symbol or company name (CSV or repeated param)."
+          items:
+            type: string
+          collectionFormat: csv
+        - in: query
+          name: event_type
+          type: string
+          description: "Filter by event type (e.g. stock_ohlc)."
+        - in: query
+          name: limit
+          type: integer
+          description: "Maximum rows to export (default 100, max 1000)."
+        - in: query
+          name: order
+          type: string
+          enum: ["ASC", "DESC"]
+          description: "Sort order by time (default DESC)."
       responses:
         200:
           description: "Exported dataset"

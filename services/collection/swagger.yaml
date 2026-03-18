@@ -125,8 +125,8 @@ definitions:
     required: [dataset_id, data_source, dataset_type, time_object, events]
     example:
       dataset_id: "dataset_1741651200000_1"
-      data_source: "MarketStack"
-      dataset_type: "daily_stock_data"
+      data_source: "YahooFinance"
+      dataset_type: "daily_stock_ohlc_data"
       time_object:
         timestamp: "2026-03-11T12:00:00.000Z"
         timezone: "UTC"
@@ -161,10 +161,10 @@ definitions:
         example: "dataset_1741651200000_1"
       data_source:
         type: string
-        example: "MarketStack"
+        example: "YahooFinance"
       dataset_type:
         type: string
-        example: "daily_stock_data"
+        example: "daily_stock_ohlc_data"
       time_object:
         $ref: "#/definitions/TimeObject"
       events:
@@ -174,14 +174,22 @@ definitions:
 
   EventsRequest:
     type: object
+    required: [symbols, exchange]
     properties:
       symbols:
         type: array
         items:
           type: string
-        example: ["AAPL.XNAS", "MSFT.XNAS"]
+        description: >
+          Bare ticker symbols — no exchange suffix (dots are not allowed).
+          The exchange field is combined with each symbol to form the
+          fully-qualified ADAGE identifier, e.g. "AAPL" + "XNAS" → "AAPL.XNAS".
+        example: ["AAPL", "MSFT"]
       exchange:
         type: string
+        description: >
+          Exchange code applied to all symbols (e.g. "XNAS" for NASDAQ,
+          "XASX" for ASX). Combined with each symbol as "SYMBOL.EXCHANGE".
         example: "XNAS"
       date_from:
         type: string
@@ -191,16 +199,6 @@ definitions:
         type: string
         format: date
         example: "2026-03-01"
-      sort:
-        type: string
-        enum: ["ASC", "DESC"]
-        example: "DESC"
-      limit:
-        type: integer
-        example: 100
-      offset:
-        type: integer
-        example: 0
 
   RemoveEventsRequest:
     type: object
@@ -209,10 +207,11 @@ definitions:
         type: array
         items:
           type: string
+        description: >
+          Fully-qualified symbols to remove (e.g. "AAPL.XNAS"). These must
+          match the stored form — the same as returned by the fetch endpoint.
+          Omit to match all symbols.
         example: ["AAPL.XNAS", "MSFT.XNAS"]
-      exchange:
-        type: string
-        example: "XNAS"
       date_from:
         type: string
         format: date
@@ -250,14 +249,6 @@ definitions:
       description:
         type: string
         example: "Data for listed tech companies"
-      symbols:
-        type: array
-        items:
-          type: string
-        example: ["AAPL.XNAS", "MSFT.XNAS"]
-      exchange:
-        type: string
-        example: "XNAS"
 
   DatasetUpdateRequest:
     type: object
@@ -268,14 +259,6 @@ definitions:
       description:
         type: string
         example: "Other description"
-      symbols:
-        type: array
-        items:
-          type: string
-        example: ["AAPL.XNAS", "MSFT.XNAS"]
-      exchange:
-        type: string
-        example: "XNAS"
 
   DatasetRemoveResponse:
     type: object
@@ -433,6 +416,10 @@ paths:
           description: "Events fetched successfully"
           schema:
             $ref: "#/definitions/FetchEventsResponse"
+        400:
+          description: "Invalid request body (missing symbols/exchange, or symbol contains a dot)"
+          schema:
+            $ref: "#/definitions/ErrorResponseDataset"
         404:
           description: "Dataset not found"
           schema:

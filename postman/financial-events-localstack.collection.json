@@ -122,7 +122,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"symbols\": [\"AAPL.XNAS\", \"MSFT.XNAS\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-02\",\n  \"sort\": \"DESC\",\n  \"limit\": 100,\n  \"offset\": 0\n}"
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-03\"\n}"
         },
         "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
       }

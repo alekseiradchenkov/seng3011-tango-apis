@@ -57,20 +57,7 @@ router.post(
 router.get(
   "/datasets/:datasetId",
   asyncHandler<AuthRequest>(async (req, res) => {
-    const limitRaw = req.query.limit;
-    const offsetRaw = req.query.offset;
-    const limit =
-      typeof limitRaw === "string" ? Number.parseInt(limitRaw, 10) : undefined;
-    const offset =
-      typeof offsetRaw === "string"
-        ? Number.parseInt(offsetRaw, 10)
-        : undefined;
-
-    const dataset = getDataset(req.userId, req.params.datasetId as string, {
-      limit,
-      offset,
-    });
-    const resolved = await dataset;
+    const resolved = await getDataset(req.userId, req.params.datasetId as string);
 
     if (!assertDatasetExists(res, resolved)) return;
 
@@ -107,21 +94,29 @@ router.delete(
 router.post(
   "/datasets/:datasetId/events/fetch",
   asyncHandler<AuthRequest>(async (req, res) => {
-    const { symbols, exchange, date_from, date_to, sort, limit, offset } =
-      req.body;
+    const { symbols, exchange, date_from, date_to } = req.body;
+
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      res.status(400).json({ error: "INVALID_PARAMETERS", message: "symbols must be a non-empty array." });
+      return;
+    }
+    if (typeof exchange !== "string" || exchange.trim().length === 0) {
+      res.status(400).json({ error: "INVALID_PARAMETERS", message: "exchange is required (e.g. \"XNAS\")." });
+      return;
+    }
+    const dotted = symbols.find((s: unknown) => typeof s === "string" && s.includes("."));
+    if (dotted) {
+      res.status(400).json({
+        error: "INVALID_PARAMETERS",
+        message: `Symbol "${dotted}" must be a bare ticker (no dots). Use the exchange field instead.`,
+      });
+      return;
+    }
 
     const result = await fetchEvents(
       req.userId,
       req.params.datasetId as string,
-      {
-        symbols,
-        exchange,
-        date_from,
-        date_to,
-        sort,
-        limit,
-        offset,
-      },
+      { symbols, exchange: exchange.trim(), date_from, date_to },
     );
 
     if (!result) {
@@ -138,11 +133,10 @@ router.post(
 router.delete(
   "/datasets/:datasetId/events/remove",
   asyncHandler<AuthRequest>(async (req, res) => {
-    const { symbols, exchange, date_from, date_to } = req.body;
+    const { symbols, date_from, date_to } = req.body;
 
     const result = removeEvents(req.userId, req.params.datasetId as string, {
       symbols,
-      exchange,
       date_from,
       date_to,
     });

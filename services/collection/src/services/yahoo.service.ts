@@ -58,23 +58,32 @@ export async function getYahooEod(params: {
   date_from?: string;
   date_to?: string;
 }): Promise<AdageEvent[]> {
-  const symbols = (params.symbols ?? []).map(toYahooSymbol).filter(Boolean);
-  if (symbols.length === 0) return [];
+  // Build a map from the base Yahoo ticker (e.g. "AAPL") back to the full
+  // original symbol (e.g. "AAPL.XNAS") so the output preserves the caller's
+  // exchange suffix without hardcoding anything.
+  const symbolMap = new Map<string, string>();
+  for (const sym of params.symbols ?? []) {
+    const base = toYahooSymbol(sym);
+    if (base) symbolMap.set(base, sym.trim());
+  }
+
+  const tickers = Array.from(symbolMap.keys());
+  if (tickers.length === 0) return [];
 
   const period1 = params.date_from ? new Date(`${params.date_from}T00:00:00Z`) : undefined;
-  // make end exclusive-ish by using end of day
   const period2 = params.date_to ? new Date(`${params.date_to}T23:59:59Z`) : undefined;
 
   const events: AdageEvent[] = [];
 
-  for (const s of symbols) {
-    const chart = await fetchYahooChart(s, period1, period2);
+  for (const ticker of tickers) {
+    const chart = await fetchYahooChart(ticker, period1, period2);
     const result = chart.chart?.result?.[0];
     if (!result) {
       const desc = chart.chart?.error?.description ?? "No chart result";
       throw new Error(`Yahoo chart missing result: ${desc}`);
     }
 
+    const originalSymbol = symbolMap.get(ticker) ?? ticker;
     const tsArr = result.timestamp ?? [];
     const q = result.indicators?.quote?.[0];
     const opens = q?.open ?? [];
@@ -94,7 +103,7 @@ export async function getYahooEod(params: {
         },
         event_type: "stock_ohlc",
         attribute: {
-          symbol: `${s}.XNAS`,
+          symbol: originalSymbol,
           open: safeNumber(opens[i]),
           high: safeNumber(highs[i]),
           low: safeNumber(lows[i]),

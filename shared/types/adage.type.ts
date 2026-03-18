@@ -32,4 +32,6 @@ export type AdageData = {
   dataset_id: string;
   time_object: AdageTimeObject;
   events: AdageEvents;
+  name?: string;
+  description?: string;
 };

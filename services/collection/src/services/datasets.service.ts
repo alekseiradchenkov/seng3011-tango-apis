@@ -13,8 +13,8 @@ import { AdageData, AdageEvent } from "../../../../shared/types/adage.type";
 import { DatasetFilters, DatasetMetadata } from "../../../../shared/types/db.type";
 import {
   DatasetCreateInput,
-  DatasetEventsQuery,
-  DatasetPagination,
+  FetchEventsInput,
+  RemoveEventsFilter,
 } from "../../../../shared/types/datasets.type";
 import { nowTimeObject } from "../../../../shared/utils/time.util";
 import { getYahooEod } from "./yahoo.service";
@@ -91,11 +91,13 @@ function toAdageData(meta: DatasetMetadata, events: AdageEvent[]): AdageData {
     dataset_type: meta.dataset_type,
     dataset_id: meta.dataset_id,
     time_object: meta.time_object,
+    ...(meta.name !== undefined ? { name: meta.name } : {}),
+    ...(meta.description !== undefined ? { description: meta.description } : {}),
     events,
   };
 }
 
-export async function getDatasets(userId: string): Promise<DatasetMetadata[]> {
+export async function getDatasets(userId: string): Promise<AdageData[]> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const ddb = getDdbDocClient();
   const out = await ddb.send(
@@ -109,22 +111,15 @@ export async function getDatasets(userId: string): Promise<DatasetMetadata[]> {
     }),
   );
 
-  return (out.Items ?? []).map((i: any) => ({
-    data_source: i.data_source,
-    dataset_type: i.dataset_type,
-    dataset_id: i.dataset_id,
-    time_object: i.time_object,
-    user_id: i.user_id,
-    name: i.name,
-    description: i.description,
-    filters: i.filters,
-  }));
+  return (out.Items ?? []).map((i: any) =>
+    toAdageData(i as DatasetMetadata, []),
+  );
 }
 
 export async function createDataset(
   userId: string,
   input: DatasetCreateInput,
-): Promise<DatasetMetadata> {
+): Promise<AdageData> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
   const ddb = getDdbDocClient();
@@ -152,15 +147,15 @@ export async function createDataset(
     }),
   );
 
-  await s3WriteJson(eventsBucket, datasetS3Key(userId, datasetId), toAdageData(meta, []));
+  const adageData = toAdageData(meta, []);
+  await s3WriteJson(eventsBucket, datasetS3Key(userId, datasetId), adageData);
 
-  return meta;
+  return adageData;
 }
 
 export async function getDataset(
   userId: string,
   datasetId: string,
-  pagination?: DatasetPagination,
 ): Promise<AdageData | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
@@ -177,16 +172,14 @@ export async function getDataset(
 
   const full = await s3ReadJson<AdageData>(eventsBucket, datasetS3Key(userId, datasetId));
   const events = full?.events ?? [];
-  const limit = pagination?.limit && pagination.limit > 0 ? Math.min(pagination.limit, 100) : 100;
-  const offset = pagination?.offset && pagination.offset > 0 ? pagination.offset : 0;
-  return toAdageData(meta, events.slice(offset, offset + limit));
+  return toAdageData(meta, events.slice(0, 100));
 }
 
 export async function updateDataset(
   userId: string,
   datasetId: string,
   input: DatasetCreateInput,
-): Promise<DatasetMetadata | null> {
+): Promise<AdageData | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const ddb = getDdbDocClient();
 
@@ -213,17 +206,7 @@ export async function updateDataset(
   );
 
   if (!out.Attributes) return null;
-  const i: any = out.Attributes;
-  return {
-    data_source: i.data_source,
-    dataset_type: i.dataset_type,
-    dataset_id: i.dataset_id,
-    time_object: i.time_object,
-    user_id: i.user_id,
-    name: i.name,
-    description: i.description,
-    filters: i.filters,
-  };
+  return toAdageData(out.Attributes as unknown as DatasetMetadata, []);
 }
 
 export async function deleteDataset(userId: string, datasetId: string): Promise<number> {
@@ -254,7 +237,7 @@ export async function deleteDataset(userId: string, datasetId: string): Promise<
 export async function fetchEvents(
   userId: string,
   datasetId: string,
-  query: DatasetEventsQuery,
+  query: FetchEventsInput,
 ): Promise<{ count: number; dataset: AdageData } | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
@@ -269,21 +252,21 @@ export async function fetchEvents(
   if (!metaOut.Item) return null;
   const meta = metaOut.Item as unknown as DatasetMetadata;
 
+  // Build fully-qualified ADAGE symbols: "AAPL" + "XNAS" → "AAPL.XNAS"
+  const qualifiedSymbols = (query.symbols ?? []).map((sym) => `${sym}.${query.exchange}`);
+
   // Strict mode: no fake fallback. If Yahoo fails, the request fails.
   const events = await getYahooEod({
-    symbols: query.symbols,
+    symbols: qualifiedSymbols,
     date_from: query.date_from,
     date_to: query.date_to,
   });
 
   const newFilters: DatasetFilters = {
     symbols: query.symbols,
-    ...(query.exchange ? { exchange: query.exchange } : {}),
+    exchange: query.exchange,
     ...(query.date_from ? { date_from: query.date_from } : {}),
     ...(query.date_to ? { date_to: query.date_to } : {}),
-    ...(query.sort ? { sort: query.sort } : {}),
-    ...(query.limit ? { limit: query.limit } : {}),
-    ...(query.offset ? { offset: query.offset } : {}),
   };
 
   meta.time_object = nowTimeObject();
@@ -312,7 +295,7 @@ export async function fetchEvents(
 export async function removeEvents(
   userId: string,
   datasetId: string,
-  query?: DatasetEventsQuery,
+  query?: RemoveEventsFilter,
 ): Promise<{ count: number } | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
@@ -336,12 +319,11 @@ export async function removeEvents(
 
     const symbolMatch =
       !query.symbols?.length || query.symbols.includes(i.attribute.symbol as string);
-    const exchangeMatch = !query.exchange || (i.attribute.exchange as string) === query.exchange;
     const dateFromMatch = !query.date_from || (i.time_object.timestamp as string) >= query.date_from;
     const dateToMatch = !query.date_to || (i.time_object.timestamp as string) <= query.date_to;
 
     // Keep items that DO NOT match removal filter
-    return !(symbolMatch && exchangeMatch && dateFromMatch && dateToMatch);
+    return !(symbolMatch && dateFromMatch && dateToMatch);
   });
 
   const countRemoved = countBefore - newEvents.length;

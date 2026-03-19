@@ -65,7 +65,7 @@ router.get("/events/trends", (_req: Request, res: Response) => {
 
 router.post("/charts", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = (req as AuthRequest).userId;
+    const userId = (req as unknown as AuthRequest).userId;
     const { type, dataset_id, x_axis, y_axis, title, series } = req.body;
 
     if (!type || !dataset_id || !x_axis || !y_axis) {
@@ -101,7 +101,7 @@ router.post("/charts", async (req: Request, res: Response, next: NextFunction) =
 
 router.get("/charts", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = (req as AuthRequest).userId;
+    const userId = (req as unknown as AuthRequest).userId;
     const table = requireEnv("CHARTS_TABLE");
     const ddb = getDdbDocClient();
 

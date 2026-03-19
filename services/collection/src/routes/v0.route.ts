@@ -13,19 +13,14 @@ try {
   swaggerDoc = null;
 }
 
-router.use("/docs", swaggerui.serve);
-router.get("/docs", swaggerui.setup(swaggerDoc ?? {}));
+router.use("/collection/docs", swaggerui.serve);
+router.get("/collection/docs", swaggerui.setup(swaggerDoc ?? {}));
 
-router.get("/status", async (req: Request, res: Response) => {
+router.get("/collection/status", async (_req: Request, res: Response) => {
   try {
-    res.status(200).json({
-      timestamp: new Date().toISOString(),
-    });
+    res.status(200).json({ timestamp: new Date().toISOString() });
   } catch {
-    res.status(503).json({
-      error: "UNREACHABLE",
-      message: "Service is unreachable.",
-    });
+    res.status(503).json({ error: "UNREACHABLE", message: "Service is unreachable." });
   }
 });
 

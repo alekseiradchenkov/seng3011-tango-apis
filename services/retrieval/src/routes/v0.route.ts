@@ -12,10 +12,10 @@ try {
   swaggerDoc = null;
 }
 
-router.use("/visualisation/docs", swaggerui.serve);
-router.get("/visualisation/docs", swaggerui.setup(swaggerDoc ?? {}));
+router.use("/retrieval/docs", swaggerui.serve);
+router.get("/retrieval/docs", swaggerui.setup(swaggerDoc ?? {}));
 
-router.get("/visualisation/status", (_req: Request, res: Response) => {
+router.get("/retrieval/status", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 

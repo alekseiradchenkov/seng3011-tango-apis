@@ -6,6 +6,8 @@ import * as path from "path";
 const router = Router();
 
 let swaggerDoc: Record<string, unknown> | null = null;
+// In Lambda the bundle is flat (__dirname = /var/task), so swagger.yaml lands
+// alongside index.js. Locally __dirname is src/routes/, so go up two levels.
 for (const candidate of [
   path.resolve(__dirname, "swagger.yaml"),
   path.resolve(__dirname, "../../swagger.yaml"),
@@ -14,13 +16,14 @@ for (const candidate of [
     swaggerDoc = yaml.load(candidate) as Record<string, unknown>;
     if (swaggerDoc) break;
   } catch {
+    // try next candidate
   }
 }
 
-router.use("/collection/docs", swaggerui.serve);
-router.get("/collection/docs", swaggerui.setup(swaggerDoc ?? {}));
+router.use("/auth/docs", swaggerui.serve);
+router.get("/auth/docs", swaggerui.setup(swaggerDoc ?? {}));
 
-router.get("/collection/status", (_req: Request, res: Response) => {
+router.get("/auth/status", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 

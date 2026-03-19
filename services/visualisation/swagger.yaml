@@ -329,7 +329,7 @@ definitions:
       $ref: "#/definitions/Chart"
 
 paths:
-  /v0/docs:
+  /v0/visualisation/docs:
     get:
       tags: ["General"]
       summary: "Retrieve Swagger documentation"
@@ -341,7 +341,7 @@ paths:
             type: string
             example: "<!DOCTYPE html><html>...</html>"
 
-  /v0/status:
+  /v0/visualisation/status:
     get:
       tags: ["General"]
       summary: "Check API health"

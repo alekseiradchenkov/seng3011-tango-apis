@@ -268,13 +268,8 @@ definitions:
         type: integer
         example: 1
 
-  DatasetListResponse:
-    type: array
-    items:
-      $ref: "#/definitions/AdageData"
-
 paths:
-  /v0/docs:
+  /v0/collection/docs:
     get:
       tags: ["General"]
       summary: "Retrieve Swagger documentation"
@@ -286,7 +281,7 @@ paths:
             type: string
             example: "<!DOCTYPE html><html>...</html>"
 
-  /v0/status:
+  /v0/collection/status:
     get:
       tags: ["General"]
       summary: "Check API health"
@@ -318,38 +313,7 @@ paths:
           schema:
             $ref: "#/definitions/ErrorResponseDataset"
 
-    get:
-      tags: ["Data Collection"]
-      summary: "List all datasets"
-      security:
-        - BearerAuth: []
-      responses:
-        200:
-          description: "List of datasets"
-          schema:
-            $ref: "#/definitions/DatasetListResponse"
-
   /v1/datasets/{dataset_id}:
-    get:
-      tags: ["Data Collection"]
-      summary: "Retrieve a dataset (with events)"
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: dataset_id
-          in: path
-          required: true
-          type: string
-      responses:
-        200:
-          description: "Dataset"
-          schema:
-            $ref: "#/definitions/AdageData"
-        404:
-          description: "Dataset not found"
-          schema:
-            $ref: "#/definitions/ErrorResponseDatasetNotFound"
-
     put:
       tags: ["Data Collection"]
       summary: "Modify a dataset"

@@ -16,6 +16,8 @@ produces:
   - "application/json"
 
 tags:
+  - name: "General"
+    description: "Endpoints for docs and health checks."
   - name: "Auth"
     description: "User signup, login, and logout via Cognito."
 
@@ -68,6 +70,35 @@ definitions:
         example: "email and password are required"
 
 paths:
+  /v0/auth/docs:
+    get:
+      tags: ["General"]
+      summary: "Retrieve Swagger documentation"
+      produces: ["text/html"]
+      responses:
+        200:
+          description: "Swagger documentation (rendered)"
+          schema:
+            type: string
+            example: "<!DOCTYPE html><html>...</html>"
+
+  /v0/auth/status:
+    get:
+      tags: ["General"]
+      summary: "Check API health"
+      responses:
+        200:
+          description: "API status"
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: "ok"
+              timestamp:
+                type: string
+                format: date-time
+
   /v1/auth/signup:
     post:
       tags: ["Auth"]

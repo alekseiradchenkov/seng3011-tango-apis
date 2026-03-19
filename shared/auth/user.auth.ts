@@ -48,10 +48,25 @@ export async function checkAuth(
   next: NextFunction,
 ) {
   try {
+    const bypass =
+      process.env.AUTH_BYPASS === "1" || process.env.AUTH_BYPASS === "true";
+
+    // If bypass is enabled, always trust `x-user-id` and skip Cognito entirely.
+    if (bypass) {
+      const headerUserId = req.headers["x-user-id"];
+      const userId =
+        typeof headerUserId === "string" && headerUserId.length > 0
+          ? headerUserId
+          : "local-user";
+      (req as AuthRequest).userId = userId;
+      next();
+      return;
+    }
+
     if (!process.env.COGNITO_USER_POOL_ID || !process.env.COGNITO_CLIENT_ID) {
       res.status(500).json({
         error: "AUTH_ENV_NOT_FOUND",
-        message: "Authirization environment variables are not set.",
+        message: "Authorization environment variables are not set.",
       });
       return;
     }

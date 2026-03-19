@@ -1,0 +1,160 @@
+swagger: "2.0"
+info:
+  version: "1.0.0"
+  title: "Authentication API"
+  description: >
+    Microservice for user authentication via AWS Cognito for the SENG3011 Team Tango project.
+
+host: "127.0.0.1"
+schemes:
+  - "https"
+basePath: "/"
+
+consumes:
+  - "application/json"
+produces:
+  - "application/json"
+
+tags:
+  - name: "Auth"
+    description: "User signup, login, and logout via Cognito."
+
+definitions:
+  AuthCredentials:
+    type: object
+    required: [email, password]
+    properties:
+      email:
+        type: string
+        format: email
+        example: "user@example.com"
+      password:
+        type: string
+        example: "MyP@ssw0rd1!"
+
+  LoginResponse:
+    type: object
+    required: [accessToken, idToken, refreshToken]
+    properties:
+      accessToken:
+        type: string
+        description: "Cognito access token (use as Bearer token for authenticated endpoints)."
+        example: "eyJraWQiOiI..."
+      idToken:
+        type: string
+        description: "Cognito ID token."
+        example: "eyJraWQiOiI..."
+      refreshToken:
+        type: string
+        description: "Cognito refresh token."
+        example: "eyJjdHkiOiJKV1QiLCJlb..."
+
+  StatusResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        example: "ok"
+
+  ErrorResponse:
+    type: object
+    required: [error, message]
+    properties:
+      error:
+        type: string
+        example: "BAD_REQUEST"
+      message:
+        type: string
+        example: "email and password are required"
+
+paths:
+  /v1/auth/signup:
+    post:
+      tags: ["Auth"]
+      summary: "Register a new user"
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/AuthCredentials"
+      responses:
+        201:
+          description: "User created successfully"
+          schema:
+            $ref: "#/definitions/StatusResponse"
+        400:
+          description: "Missing or invalid fields"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        409:
+          description: "A user with this email already exists"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        500:
+          description: "Cognito signup error"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+  /v1/auth/login:
+    post:
+      tags: ["Auth"]
+      summary: "Login and receive Cognito tokens"
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/AuthCredentials"
+      responses:
+        200:
+          description: "Login successful"
+          schema:
+            $ref: "#/definitions/LoginResponse"
+        400:
+          description: "Missing or invalid fields"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        401:
+          description: "Invalid credentials"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+  /v1/auth/logout:
+    post:
+      tags: ["Auth"]
+      summary: "Invalidate the current access token"
+      parameters:
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              accessToken:
+                type: string
+                description: "Access token to invalidate (alternative to Authorization header)."
+                example: "eyJraWQiOiI..."
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: "Logout successful"
+          schema:
+            $ref: "#/definitions/StatusResponse"
+        400:
+          description: "Missing access token"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+        500:
+          description: "Cognito logout error"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: >
+      Provide access token as: "Bearer <accessToken>"

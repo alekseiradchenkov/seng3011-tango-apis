@@ -302,6 +302,31 @@ export class FinancialEventsStack extends Stack {
       authFunction,
     );
 
+    // Public swagger docs & status — no auth required
+    for (const [svc, integration] of [
+      ["collection", collectionIntegration],
+      ["retrieval", retrievalIntegration],
+      ["visualisation", visualisationIntegration],
+    ] as const) {
+      // Serves the swagger HTML page
+      httpApi.addRoutes({
+        path: `/v0/${svc}/docs`,
+        methods: [apigw.HttpMethod.GET],
+        integration,
+      });
+      // Serves swagger-ui static assets (CSS/JS) loaded by the HTML page
+      httpApi.addRoutes({
+        path: `/v0/${svc}/docs/{proxy+}`,
+        methods: [apigw.HttpMethod.GET],
+        integration,
+      });
+      httpApi.addRoutes({
+        path: `/v0/${svc}/status`,
+        methods: [apigw.HttpMethod.GET],
+        integration,
+      });
+    }
+
     // Collection routes
     httpApi.addRoutes({
       path: "/v1/datasets",

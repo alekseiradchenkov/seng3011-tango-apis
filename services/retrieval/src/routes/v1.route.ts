@@ -1,0 +1,89 @@
+import { NextFunction, Request, Response, Router } from "express";
+
+import { checkAuth } from "../../../../shared/auth/user.auth";
+import { AuthRequest } from "../../../../shared/types/auth.type";
+import {
+  EventQueryParams,
+  exportEventsAsCsv,
+  getDataset,
+  getDatasets,
+  getEvents,
+  getEventStats,
+} from "../services/retrieval.service";
+
+const router = Router();
+
+function asyncHandler<T extends Request>(
+  fn: (req: T, res: Response, next: NextFunction) => Promise<void>,
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    fn(req as T, res, next).catch(next);
+  };
+}
+
+router.use(checkAuth);
+
+router.get(
+  "/datasets",
+  asyncHandler<AuthRequest>(async (req, res) => {
+    res.status(200).json(await getDatasets(req.userId));
+  }),
+);
+
+router.get(
+  "/datasets/:datasetId",
+  asyncHandler<AuthRequest>(async (req, res) => {
+    const result = await getDataset(req.userId, req.params.datasetId as string);
+    if (!result) {
+      res.status(404).json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
+      return;
+    }
+    res.status(200).json(result);
+  }),
+);
+
+router.get(
+  "/datasets/:datasetId/events",
+  asyncHandler<AuthRequest>(async (req, res) => {
+    const params: EventQueryParams = req.query;
+    const result = await getEvents(req.userId, req.params.datasetId as string, params);
+    if (!result) {
+      res.status(404).json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
+      return;
+    }
+    res.status(200).json(result);
+  }),
+);
+
+router.get(
+  "/datasets/:datasetId/events/stats",
+  asyncHandler<AuthRequest>(async (req, res) => {
+    const params: EventQueryParams = req.query;
+    const result = await getEventStats(req.userId, req.params.datasetId as string, params);
+    if (!result) {
+      res.status(404).json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
+      return;
+    }
+    res.status(200).json(result);
+  }),
+);
+
+router.get(
+  "/datasets/:datasetId/export",
+  asyncHandler<AuthRequest>(async (req, res) => {
+    const params: EventQueryParams = req.query;
+    const csvData = await exportEventsAsCsv(req.userId, req.params.datasetId as string, params);
+    if (csvData === null) {
+      res.status(404).json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
+      return;
+    }
+    res.status(200).type("text/csv").send(csvData);
+  }),
+);
+
+router.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("An error occurred:", err);
+  res.status(500).json({ error: "INTERNAL", message: String(err?.message ?? err) });
+});
+
+export default router;

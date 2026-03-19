@@ -12,6 +12,13 @@ module.exports = [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      // 'any' is unavoidable in some Express/AWS SDK patterns — warn only.
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Intentionally-unused params must be prefixed with _ (e.g. Express error handlers).
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
 ];

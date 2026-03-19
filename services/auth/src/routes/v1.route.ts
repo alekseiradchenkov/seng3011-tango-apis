@@ -16,8 +16,8 @@ router.post("/signup", async (req: Request, res: Response) => {
 
     await signup(email, password);
     res.status(201).json({ status: "ok" });
-  } catch (err: any) {
-    const code = err?.name ?? err?.__type;
+  } catch (err: unknown) {
+    const code = (err as { name?: string; __type?: string })?.name ?? (err as { __type?: string })?.__type;
     if (code === "UsernameExistsException") {
       res.status(409).json({
         error: "USER_ALREADY_EXISTS",
@@ -28,7 +28,7 @@ router.post("/signup", async (req: Request, res: Response) => {
 
     res.status(500).json({
       error: "AUTH_SIGNUP_FAILED",
-      message: String(err?.message ?? err),
+      message: String((err as { message?: string })?.message ?? err),
     });
   }
 });
@@ -46,10 +46,10 @@ router.post("/login", async (req: Request, res: Response) => {
 
     const tokens = await login(email, password);
     res.status(200).json(tokens);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(401).json({
       error: "AUTH_LOGIN_FAILED",
-      message: String(err?.message ?? err),
+      message: String((err as { message?: string })?.message ?? err),
     });
   }
 });
@@ -72,10 +72,10 @@ router.post("/logout", async (req: Request, res: Response) => {
 
     await logout(token);
     res.status(200).json({ status: "ok" });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({
       error: "AUTH_LOGOUT_FAILED",
-      message: String(err?.message ?? err),
+      message: String((err as { message?: string })?.message ?? err),
     });
   }
 });

@@ -67,8 +67,8 @@ async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
     const body = await out.Body?.transformToString();
     if (!body) return null;
     return JSON.parse(body) as T;
-  } catch (e: any) {
-    if (e?.name === "NoSuchKey") return null;
+  } catch (e: unknown) {
+    if ((e as { name?: string })?.name === "NoSuchKey") return null;
     return null;
   }
 }
@@ -111,7 +111,7 @@ export async function getDatasets(userId: string): Promise<AdageData[]> {
     }),
   );
 
-  return (out.Items ?? []).map((i: any) =>
+  return (out.Items ?? []).map((i: Record<string, unknown>) =>
     toAdageData(i as DatasetMetadata, []),
   );
 }

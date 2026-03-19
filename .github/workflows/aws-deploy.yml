@@ -43,6 +43,13 @@ jobs:
         run: |
           echo "Region: ${AWS_REGION}"
 
+      - name: Install service dependencies
+        run: |
+          for svc in auth collection retrieval visualisation; do
+            echo "Installing $svc..."
+            npm ci --prefix "services/$svc"
+          done
+
       - name: Install CDK deps
         working-directory: cdk
         run: npm ci

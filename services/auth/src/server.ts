@@ -15,7 +15,7 @@ app.use((req: Request, res: Response) => {
   res.status(404).send();
 });
 
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: { status?: number; message?: string }, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err.status || 500).json({
     error: "INTERNAL",
     message: String(err?.message ?? err),

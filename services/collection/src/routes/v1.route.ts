@@ -153,7 +153,7 @@ router.delete(
   }),
 );
 
-router.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+router.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("An error occurred:", err);
   res.status(500).json({ error: err.message });
 });

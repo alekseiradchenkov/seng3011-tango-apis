@@ -189,7 +189,7 @@ router.get("/charts/:chartId/render", async (req: Request, res: Response, next: 
   }
 });
 
-function buildChartHtml(chart: any): string {
+function buildChartHtml(chart: Record<string, unknown>): string {
   const title = chart.title ?? `${chart.y_axis} over ${chart.x_axis}`;
   const seriesJson = JSON.stringify(chart.series ?? []);
   const chartType = JSON.stringify(chart.type ?? "line");
@@ -246,7 +246,7 @@ function buildChartHtml(chart: any): string {
 
 router.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Visualisation error:", err);
-  res.status(500).json({ error: "INTERNAL", message: String((err as any)?.message ?? err) });
+  res.status(500).json({ error: "INTERNAL", message: String((err as Error)?.message ?? err) });
 });
 
 export default router;

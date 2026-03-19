@@ -21,9 +21,12 @@
     "dev": "ts-node-dev -T src/server.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1012.0",
+    "@aws-sdk/lib-dynamodb": "^3.1012.0",
+    "@vendia/serverless-express": "^4.12.1",
+    "aws-jwt-verify": "^5.1.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "@vendia/serverless-express": "^4.12.1",
     "morgan": "^1.10.1",
     "swagger-ui-express": "^5.0.1",
     "yamljs": "^0.3.0"

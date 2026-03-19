@@ -17,10 +17,10 @@ app.use((req: express.Request, res: express.Response) => {
 
 app.use(
   (
-    err: any,
-    req: express.Request,
+    err: { status?: number },
+    _req: express.Request,
     res: express.Response,
-    next: express.NextFunction,
+    _next: express.NextFunction,
   ) => {
     res.status(err.status || 500).send();
   },

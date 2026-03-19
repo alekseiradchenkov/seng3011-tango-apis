@@ -5,7 +5,7 @@ import * as path from "path";
 
 const router = Router();
 
-let swaggerDoc: any = null;
+let swaggerDoc: Record<string, unknown> | null = null;
 try {
   swaggerDoc = yaml.load(path.resolve(__dirname, "../../swagger.yaml"));
 } catch {

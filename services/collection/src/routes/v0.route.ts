@@ -5,7 +5,7 @@ import * as path from "path";
 
 const router = Router();
 
-let swaggerDoc: any = null;
+let swaggerDoc: Record<string, unknown> | null = null;
 try {
   swaggerDoc = yaml.load(path.resolve(__dirname, "../../swagger.yaml"));
 } catch {
@@ -21,7 +21,7 @@ router.get("/status", async (req: Request, res: Response) => {
     res.status(200).json({
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch {
     res.status(503).json({
       error: "UNREACHABLE",
       message: "Service is unreachable.",

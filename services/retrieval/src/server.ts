@@ -150,7 +150,7 @@ function sortAndLimit(events: AdageEvent[], req: Request): AdageEvent[] {
   return sorted.slice(0, safeLimit);
 }
 
-let swaggerDoc: any = null;
+let swaggerDoc: Record<string, unknown> | null = null;
 try {
   swaggerDoc = yaml.load(path.resolve(__dirname, "../swagger.yaml"));
 } catch {
@@ -184,7 +184,7 @@ app.get("/v1/datasets", async (req: Request, res: Response, next: NextFunction) 
       }),
     );
 
-    const items = (out.Items ?? []).map((i: any) => ({
+    const items = (out.Items ?? []).map((i: Record<string, unknown>) => ({
       dataset_id: i.dataset_id,
       name: i.name,
       description: i.description,
@@ -222,7 +222,7 @@ app.get(
           .json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
         return;
       }
-      const meta: any = metaOut.Item;
+      const meta = metaOut.Item as Record<string, unknown>;
       const full = await s3ReadJson<AdageData>(eventsBucket, datasetS3Key(userId, datasetId));
       const events = full?.events ?? [];
       res.status(200).json({
@@ -263,7 +263,7 @@ app.get(
         return;
       }
 
-      const meta: any = metaOut.Item;
+      const meta = metaOut.Item as Record<string, unknown>;
       const full = await s3ReadJson<AdageData>(eventsBucket, datasetS3Key(userId, datasetId));
       const events = full?.events ?? [];
 
@@ -361,13 +361,13 @@ app.get(
         "symbol,open,high,low,close,volume,timestamp",
         ...filtered.map((e) =>
           csv([
-            e.attribute?.symbol as any,
-            e.attribute?.open as any,
-            e.attribute?.high as any,
-            e.attribute?.low as any,
-            e.attribute?.close as any,
-            e.attribute?.volume as any,
-            e.time_object?.timestamp as any,
+            e.attribute?.symbol as string | undefined,
+            e.attribute?.open as number | undefined,
+            e.attribute?.high as number | undefined,
+            e.attribute?.low as number | undefined,
+            e.attribute?.close as number | undefined,
+            e.attribute?.volume as number | undefined,
+            e.time_object?.timestamp as string | undefined,
           ]),
         ),
       ];
@@ -384,7 +384,7 @@ app.use((req: Request, res: Response) => {
 });
 
 app.use(
-  (err: any, _req: Request, res: Response, _next: NextFunction) => {
+  (err: { message?: string }, _req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: "INTERNAL", message: String(err?.message ?? err) });
   },
 );

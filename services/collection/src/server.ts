@@ -11,18 +11,16 @@ app.use(express.json());
 
 app.use("/", routes);
 
-app.use(
-  (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    res.status(404).send();
-  },
-);
+app.use((_req: express.Request, res: express.Response) => {
+  res.status(404).send();
+});
 
 app.use(
   (
-    err: any,
-    req: express.Request,
+    err: { status?: number },
+    _req: express.Request,
     res: express.Response,
-    next: express.NextFunction,
+    _next: express.NextFunction,
   ) => {
     res.status(err.status || 500).send();
   },

@@ -6,10 +6,18 @@ import * as path from "path";
 const router = Router();
 
 let swaggerDoc: Record<string, unknown> | null = null;
-try {
-  swaggerDoc = yaml.load(path.resolve(__dirname, "../../swagger.yaml"));
-} catch {
-  swaggerDoc = null;
+// In Lambda the bundle is flat (__dirname = /var/task), so swagger.yaml lands
+// alongside index.js. Locally __dirname is src/routes/, so go up two levels.
+for (const candidate of [
+  path.resolve(__dirname, "swagger.yaml"),
+  path.resolve(__dirname, "../../swagger.yaml"),
+]) {
+  try {
+    swaggerDoc = yaml.load(candidate) as Record<string, unknown>;
+    if (swaggerDoc) break;
+  } catch {
+    // try next candidate
+  }
 }
 
 router.use("/retrieval/docs", swaggerui.serve);

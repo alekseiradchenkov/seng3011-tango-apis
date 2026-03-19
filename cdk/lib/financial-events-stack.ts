@@ -153,6 +153,16 @@ export class FinancialEventsStack extends Stack {
           "yamljs",
         ],
         externalModules: ["@aws-sdk/*"],
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (inputDir: string, outputDir: string) => [
+            `cp \"${path.join(inputDir, "swagger.yaml")}\" \"${path.join(
+              outputDir,
+              "swagger.yaml"
+            )}\"`,
+          ],
+        },
       },
       environment: {
         EVENT_INDEX_TABLE: eventIndexTable.tableName,

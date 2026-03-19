@@ -1,0 +1,292 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-0002-4000-8000-demo-flow-0002",
+    "name": "Demo Flow 2 — Advanced Event Querying & Statistics",
+    "description": "User Story: An analyst retrieves previously ingested market data using the Retrieval API, applying various filters (company, date range, pagination, sort order) and inspecting aggregated statistics.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest AAPL + MSFT + NVDA events (Jan–Feb 2026)\n  3. Query first 5 events in ascending chronological order\n  4. Filter events for AAPL only\n  5. Filter events by date range (first two weeks of Feb)\n  6. Retrieve full event statistics\n  7. Retrieve statistics scoped to a date range\n\nRun with Newman:\n  npx newman run postman/demo-flow-2-event-querying.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiId",       "value": "77e5a0c0" },
+    { "key": "baseUrl",     "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
+    { "key": "email",       "value": "demo.analyst@example.com" },
+    { "key": "password",    "value": "DemoP@ssw0rd1!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "datasetId",   "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1) Log In",
+      "description": "Authenticate and capture the Cognito access token.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', json.accessToken);",
+              "pm.test('accessToken captured', function () {",
+              "  pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/auth/login"
+      }
+    },
+    {
+      "name": "2a) Create Dataset — Query Demo",
+      "description": "Create a dataset to hold three stocks for query demonstration.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create dataset: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('datasetId', json.dataset_id);",
+              "pm.test('datasetId captured', function () { pm.expect(json.dataset_id).to.be.a('string').and.not.empty; });",
+              "console.log('Dataset created:', json.dataset_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Query Demo — AAPL, MSFT, NVDA\",\n  \"description\": \"Two months of data for query and filter demonstration\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets"
+      }
+    },
+    {
+      "name": "2b) Ingest Events — AAPL, MSFT, NVDA (Jan–Feb 2026)",
+      "description": "Populate the dataset with ~40 trading days of OHLC data across three NASDAQ stocks.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('fetch events: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events ingested', function () { pm.expect(json.count).to.be.above(0); });",
+              "console.log('Ingested', json.count, 'events.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\", \"NVDA\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-01-01\",\n  \"date_to\": \"2026-02-28\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+      }
+    },
+    {
+      "name": "3) Query — First 5 Events (Oldest First)",
+      "description": "Retrieve the 5 earliest events using ascending order. Demonstrates pagination and sort control.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('query: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('returned at most 5 events', function () {",
+              "  pm.expect(json.dataset.events.length).to.be.at.most(5);",
+              "});",
+              "pm.test('events are in ascending order', function () {",
+              "  var events = json.dataset.events;",
+              "  if (events.length < 2) return;",
+              "  var t0 = new Date(events[0].time_object.timestamp.replace(' ', 'T') + 'Z').getTime();",
+              "  var t1 = new Date(events[1].time_object.timestamp.replace(' ', 'T') + 'Z').getTime();",
+              "  pm.expect(t0).to.be.at.most(t1);",
+              "});",
+              "console.log('Earliest event:', json.dataset.events[0] && json.dataset.events[0].time_object.timestamp);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/events?order=ASC&limit=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "datasets", "{{datasetId}}", "events"],
+          "query": [
+            { "key": "order", "value": "ASC" },
+            { "key": "limit", "value": "5" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4) Query — Filter by Company (AAPL only)",
+      "description": "Retrieve only Apple events. Demonstrates the 'companies' filter which matches against symbol or name.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('filter by company: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('all returned events belong to AAPL', function () {",
+              "  var events = json.dataset.events;",
+              "  pm.expect(events.length).to.be.above(0);",
+              "  events.forEach(function(e) {",
+              "    pm.expect(e.attribute.symbol).to.include('AAPL');",
+              "  });",
+              "});",
+              "console.log('AAPL events returned:', json.retrieved);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/events?companies=AAPL",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "datasets", "{{datasetId}}", "events"],
+          "query": [
+            { "key": "companies", "value": "AAPL" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5) Query — Date Range Filter (1–14 Feb 2026)",
+      "description": "Retrieve only events from the first two weeks of February 2026. Demonstrates start_date/end_date filtering.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('date range filter: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events are within the requested date range', function () {",
+              "  var events = json.dataset.events;",
+              "  pm.expect(events.length).to.be.above(0);",
+              "  var start = new Date('2026-02-01T00:00:00Z').getTime();",
+              "  var end   = new Date('2026-02-15T00:00:00Z').getTime();",
+              "  events.forEach(function(e) {",
+              "    var ts = e.time_object.timestamp.replace(' ', 'T');",
+              "    if (!ts.endsWith('Z')) ts += 'Z';",
+              "    var t = new Date(ts).getTime();",
+              "    pm.expect(t).to.be.at.least(start);",
+              "    pm.expect(t).to.be.at.most(end);",
+              "  });",
+              "});",
+              "console.log('Events in first 2 weeks of Feb:', json.retrieved);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/events?start_date=2026-02-01&end_date=2026-02-14",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "datasets", "{{datasetId}}", "events"],
+          "query": [
+            { "key": "start_date", "value": "2026-02-01" },
+            { "key": "end_date",   "value": "2026-02-14" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6) Event Statistics — Full Dataset",
+      "description": "Retrieve aggregated statistics for all events in the dataset: total count, date range, event type breakdown, and per-company counts.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('stats: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('total_events is a positive number', function () {",
+              "  pm.expect(json.total_events).to.be.a('number').and.above(0);",
+              "});",
+              "pm.test('event_type_counts present', function () {",
+              "  pm.expect(json.event_type_counts).to.be.an('object');",
+              "});",
+              "pm.test('event_type_counts has stock_ohlc', function () {",
+              "  pm.expect(json.event_type_counts).to.have.property('stock_ohlc');",
+              "});",
+              "console.log('Total events:', json.total_events);",
+              "console.log('Event types:', JSON.stringify(json.event_type_counts));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/stats"
+      }
+    },
+    {
+      "name": "7) Event Statistics — February Only",
+      "description": "Retrieve statistics scoped to February 2026 only, demonstrating date-scoped aggregation.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('stats with date filter: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('february event count is less than full dataset', function () {",
+              "  pm.expect(json.total_events).to.be.a('number').and.above(0);",
+              "});",
+              "console.log('February events:', json.total_events);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/stats?start_date=2026-02-01&end_date=2026-02-28",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "datasets", "{{datasetId}}", "events", "stats"],
+          "query": [
+            { "key": "start_date", "value": "2026-02-01" },
+            { "key": "end_date",   "value": "2026-02-28" }
+          ]
+        }
+      }
+    }
+  ]
+}

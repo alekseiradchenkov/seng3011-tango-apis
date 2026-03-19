@@ -1,0 +1,313 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-0004-4000-8000-demo-flow-0004",
+    "name": "Demo Flow 4 — Chart Creation & Visualisation",
+    "description": "User Story: An analyst ingests market data then creates, manages, and renders interactive price charts through the Visualisation API.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest AAPL + NVDA events for Feb 2026\n  3. Create a line chart — AAPL close price over time\n  4. Create a bar chart — NVDA volume over time\n  5. List all charts for this user\n  6. Get a specific chart's metadata\n  7. Render the line chart as an interactive HTML page\n  8. Delete the bar chart\n  9. Verify the bar chart is gone by attempting to fetch it (expect 404)\n\nRun with Newman:\n  npx newman run postman/demo-flow-4-visualisation.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiId",       "value": "77e5a0c0" },
+    { "key": "baseUrl",     "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
+    { "key": "email",       "value": "demo.analyst@example.com" },
+    { "key": "password",    "value": "DemoP@ssw0rd1!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "datasetId",   "value": "" },
+    { "key": "lineChartId", "value": "" },
+    { "key": "barChartId",  "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1) Log In",
+      "description": "Authenticate and capture the Cognito access token.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', json.accessToken);",
+              "pm.test('accessToken captured', function () {",
+              "  pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/auth/login"
+      }
+    },
+    {
+      "name": "2a) Create Dataset — Chart Demo",
+      "description": "Create a dataset to back our charts.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create dataset: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('datasetId', json.dataset_id);",
+              "pm.test('datasetId captured', function () { pm.expect(json.dataset_id).to.be.a('string').and.not.empty; });",
+              "console.log('Dataset created:', json.dataset_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Chart Demo — AAPL & NVDA Feb 2026\",\n  \"description\": \"Dataset used to power price charts in the visualisation demo\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets"
+      }
+    },
+    {
+      "name": "2b) Ingest Events — AAPL + NVDA, Feb 2026",
+      "description": "Populate the dataset with daily OHLC data for Apple and NVIDIA.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('fetch events: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events ingested', function () { pm.expect(json.count).to.be.above(0); });",
+              "console.log('Ingested', json.count, 'events.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"NVDA\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-28\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+      }
+    },
+    {
+      "name": "3) Create Line Chart — AAPL Close Price",
+      "description": "Create a line chart showing Apple's daily closing price over February 2026. The series data provides the pre-computed x/y values that the render endpoint will visualise.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create chart: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('lineChartId', json.chart_id);",
+              "pm.test('chart_id captured', function () { pm.expect(json.chart_id).to.be.a('string').and.not.empty; });",
+              "pm.test('chart type is line', function () { pm.expect(json.type).to.equal('line'); });",
+              "pm.test('series is present', function () { pm.expect(json.series).to.be.an('array'); });",
+              "console.log('Line chart created:', json.chart_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"line\",\n  \"dataset_id\": \"{{datasetId}}\",\n  \"x_axis\": \"time_object.timestamp\",\n  \"y_axis\": \"attribute.close\",\n  \"title\": \"AAPL Close Price — February 2026\",\n  \"series\": [\n    {\n      \"label\": \"AAPL\",\n      \"data\": [\n        { \"x\": \"2026-02-02T00:00:00Z\", \"y\": 227.63 },\n        { \"x\": \"2026-02-03T00:00:00Z\", \"y\": 232.18 },\n        { \"x\": \"2026-02-04T00:00:00Z\", \"y\": 229.87 },\n        { \"x\": \"2026-02-05T00:00:00Z\", \"y\": 235.11 },\n        { \"x\": \"2026-02-06T00:00:00Z\", \"y\": 231.44 },\n        { \"x\": \"2026-02-09T00:00:00Z\", \"y\": 228.90 },\n        { \"x\": \"2026-02-10T00:00:00Z\", \"y\": 234.76 },\n        { \"x\": \"2026-02-11T00:00:00Z\", \"y\": 239.50 },\n        { \"x\": \"2026-02-12T00:00:00Z\", \"y\": 241.22 },\n        { \"x\": \"2026-02-13T00:00:00Z\", \"y\": 237.85 },\n        { \"x\": \"2026-02-17T00:00:00Z\", \"y\": 243.60 },\n        { \"x\": \"2026-02-18T00:00:00Z\", \"y\": 240.11 },\n        { \"x\": \"2026-02-19T00:00:00Z\", \"y\": 238.44 },\n        { \"x\": \"2026-02-20T00:00:00Z\", \"y\": 242.78 },\n        { \"x\": \"2026-02-23T00:00:00Z\", \"y\": 246.05 },\n        { \"x\": \"2026-02-24T00:00:00Z\", \"y\": 244.33 },\n        { \"x\": \"2026-02-25T00:00:00Z\", \"y\": 248.90 },\n        { \"x\": \"2026-02-26T00:00:00Z\", \"y\": 251.67 },\n        { \"x\": \"2026-02-27T00:00:00Z\", \"y\": 249.12 }\n      ]\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/v1/charts"
+      }
+    },
+    {
+      "name": "4) Create Bar Chart — NVDA Volume",
+      "description": "Create a bar chart showing NVIDIA's daily trading volume over February 2026.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create chart: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('barChartId', json.chart_id);",
+              "pm.test('chart_id captured', function () { pm.expect(json.chart_id).to.be.a('string').and.not.empty; });",
+              "pm.test('chart type is bar', function () { pm.expect(json.type).to.equal('bar'); });",
+              "console.log('Bar chart created:', json.chart_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"bar\",\n  \"dataset_id\": \"{{datasetId}}\",\n  \"x_axis\": \"time_object.timestamp\",\n  \"y_axis\": \"attribute.volume\",\n  \"title\": \"NVDA Daily Volume — February 2026\",\n  \"series\": [\n    {\n      \"label\": \"NVDA\",\n      \"data\": [\n        { \"x\": \"2026-02-02T00:00:00Z\", \"y\": 248500000 },\n        { \"x\": \"2026-02-03T00:00:00Z\", \"y\": 312000000 },\n        { \"x\": \"2026-02-04T00:00:00Z\", \"y\": 289000000 },\n        { \"x\": \"2026-02-05T00:00:00Z\", \"y\": 371000000 },\n        { \"x\": \"2026-02-06T00:00:00Z\", \"y\": 258000000 },\n        { \"x\": \"2026-02-09T00:00:00Z\", \"y\": 295000000 },\n        { \"x\": \"2026-02-10T00:00:00Z\", \"y\": 334000000 }\n      ]\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/v1/charts"
+      }
+    },
+    {
+      "name": "5) List All Charts",
+      "description": "Retrieve all charts belonging to the authenticated user. Both the line and bar charts should appear.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('list charts: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('response is an array', function () { pm.expect(json).to.be.an('array'); });",
+              "pm.test('at least 2 charts returned', function () { pm.expect(json.length).to.be.at.least(2); });",
+              "var ids = json.map(function(c){ return c.chart_id; });",
+              "pm.test('line chart is in the list', function () {",
+              "  pm.expect(ids).to.include(pm.collectionVariables.get('lineChartId'));",
+              "});",
+              "pm.test('bar chart is in the list', function () {",
+              "  pm.expect(ids).to.include(pm.collectionVariables.get('barChartId'));",
+              "});",
+              "console.log('Charts owned by user:', ids.join(', '));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/charts"
+      }
+    },
+    {
+      "name": "6) Get Line Chart — Metadata",
+      "description": "Retrieve the metadata and series data for the AAPL line chart by its ID.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('get chart: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('correct chart returned', function () {",
+              "  pm.expect(json.chart_id).to.equal(pm.collectionVariables.get('lineChartId'));",
+              "});",
+              "pm.test('chart type is line', function () { pm.expect(json.type).to.equal('line'); });",
+              "pm.test('series has data', function () {",
+              "  pm.expect(json.series).to.be.an('array').and.not.empty;",
+              "  pm.expect(json.series[0].data).to.be.an('array').and.not.empty;",
+              "});",
+              "console.log('Chart title:', json.title, '| Series:', json.series.length, '| Data points:', json.series[0].data.length);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/charts/{{lineChartId}}"
+      }
+    },
+    {
+      "name": "7) Render Line Chart — Interactive HTML",
+      "description": "Render the AAPL line chart as a self-contained interactive HTML page using Chart.js. In a browser this would display an animated price chart.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('render: 200 OK', function () { pm.response.to.have.status(200); });",
+              "pm.test('content-type is text/html', function () {",
+              "  pm.expect(pm.response.headers.get('content-type')).to.include('text/html');",
+              "});",
+              "var html = pm.response.text();",
+              "pm.test('response is an HTML document', function () {",
+              "  pm.expect(html).to.include('<html');",
+              "  pm.expect(html).to.include('</html>');",
+              "});",
+              "pm.test('Chart.js is referenced', function () {",
+              "  pm.expect(html).to.include('chart.js');",
+              "});",
+              "pm.test('chart data is embedded', function () {",
+              "  pm.expect(html).to.include('AAPL');",
+              "});",
+              "console.log('HTML chart response length:', html.length, 'chars.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/charts/{{lineChartId}}/render"
+      }
+    },
+    {
+      "name": "8) Delete Bar Chart",
+      "description": "Remove the NVDA bar chart from the user's chart library.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('delete chart: 200 OK', function () { pm.response.to.have.status(200); });",
+              "console.log('Bar chart deleted:', pm.collectionVariables.get('barChartId'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/charts/{{barChartId}}"
+      }
+    },
+    {
+      "name": "9) Confirm Deletion — Bar Chart Returns 404",
+      "description": "Verify the deleted chart is no longer accessible, confirming the deletion was permanent.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('deleted chart returns 404', function () { pm.response.to.have.status(404); });",
+              "console.log('Confirmed: bar chart', pm.collectionVariables.get('barChartId'), 'is gone.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/charts/{{barChartId}}"
+      }
+    }
+  ]
+}

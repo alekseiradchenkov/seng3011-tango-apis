@@ -154,6 +154,7 @@ definitions:
     properties:
       dataset_id:
         type: string
+        x-nullable: true
         example: "dataset_1313651"
       sectors:
         type: array
@@ -172,12 +173,12 @@ definitions:
 
   EventTrendsResponse:
     type: object
-    required: [dataset]
     properties:
       event_count:
         type: integer
         example: 14
       dataset:
+        description: "Derived trends dataset. null when not yet computed."
         $ref: "#/definitions/AdageData"
 
   ChartDataPoint:
@@ -353,7 +354,7 @@ paths:
   /v1/events/summary:
     get:
       tags: ["Visualisation"]
-      summary: "Retrieve events summary"
+      summary: "Retrieve events summary (stub — returns empty placeholders)"
       security:
         - BearerAuth: []
       parameters:
@@ -378,9 +379,10 @@ paths:
   /v1/events/trends:
     get:
       tags: ["Visualisation"]
-      summary: "Retrieve trend events as an ADAGE dataset"
+      summary: "Retrieve trend events as an ADAGE dataset (stub — returns empty placeholders)"
       description: >
-        Returns a derived trends dataset
+        Returns a derived trends dataset. Not yet fully implemented; currently
+        returns empty placeholder data.
       security:
         - BearerAuth: []
       parameters:

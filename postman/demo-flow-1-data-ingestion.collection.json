@@ -1,0 +1,206 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-0001-4000-8000-demo-flow-0001",
+    "name": "Demo Flow 1 — Market Data Ingestion",
+    "description": "User Story: An analyst signs up, logs in, creates a dataset for tech stocks, ingests real OHLC market data from Yahoo Finance, then browses the results.\n\nSteps:\n  1. Sign up (tolerates 409 if account exists)\n  2. Log in → capture accessToken\n  3. Create dataset 'AAPL & MSFT – Feb 2026'\n  4. Fetch AAPL + MSFT events for February 2026\n  5. Retrieve the full dataset to verify ingestion\n  6. List all datasets for the authenticated user\n\nRun with Newman:\n  npx newman run postman/demo-flow-1-data-ingestion.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiId",       "value": "77e5a0c0" },
+    { "key": "baseUrl",     "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
+    { "key": "email",       "value": "demo.analyst@example.com" },
+    { "key": "password",    "value": "DemoP@ssw0rd1!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "datasetId",   "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1) Sign Up",
+      "description": "Register a new analyst account. A 409 is acceptable if the account already exists.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('signup: 201 created or 409 already exists', function () {",
+              "  pm.expect([201, 409]).to.include(pm.response.code);",
+              "});",
+              "console.log('Signup status:', pm.response.code);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/auth/signup"
+      }
+    },
+    {
+      "name": "2) Log In",
+      "description": "Authenticate and capture the Cognito access token for subsequent requests.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', json.accessToken);",
+              "pm.test('accessToken captured', function () {",
+              "  pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "});",
+              "console.log('Logged in. accessToken starts with:', (json.accessToken || '').slice(0, 20) + '...');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/auth/login"
+      }
+    },
+    {
+      "name": "3) Create Dataset — 'AAPL & MSFT Feb 2026'",
+      "description": "Create a named dataset that will hold OHLC events for Apple and Microsoft.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create dataset: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('datasetId', json.dataset_id);",
+              "pm.test('dataset_id captured', function () {",
+              "  pm.expect(json.dataset_id).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.test('dataset_type is set', function () {",
+              "  pm.expect(json.dataset_type).to.be.a('string').and.not.empty;",
+              "});",
+              "console.log('Created dataset:', json.dataset_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"AAPL & MSFT — Feb 2026\",\n  \"description\": \"Daily OHLC data for Apple and Microsoft during February 2026\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets"
+      }
+    },
+    {
+      "name": "4) Fetch Events — AAPL + MSFT, Feb 2026",
+      "description": "Ingest daily OHLC market data for AAPL and MSFT from Yahoo Finance. Symbols are bare tickers; the exchange code is supplied separately.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('fetch events: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events were ingested', function () {",
+              "  pm.expect(json.count).to.be.a('number').and.above(0);",
+              "});",
+              "console.log('Ingested', json.count, 'events into dataset', pm.collectionVariables.get('datasetId'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-28\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+      }
+    },
+    {
+      "name": "5) Get Dataset — Verify Ingestion",
+      "description": "Retrieve the full dataset from the collection service to confirm events were stored in DynamoDB and S3.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('get dataset: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events array is present', function () {",
+              "  pm.expect(json.events).to.be.an('array').and.not.empty;",
+              "});",
+              "pm.test('first event has ADAGE structure', function () {",
+              "  var e = json.events[0];",
+              "  pm.expect(e).to.have.property('time_object');",
+              "  pm.expect(e).to.have.property('event_type');",
+              "  pm.expect(e).to.have.property('attribute');",
+              "});",
+              "pm.test('first event symbol includes exchange', function () {",
+              "  var symbol = json.events[0].attribute.symbol;",
+              "  pm.expect(symbol).to.include('.XNAS');",
+              "});",
+              "console.log('Dataset has', json.events.length, 'events. Sample symbol:', json.events[0].attribute.symbol);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}"
+      }
+    },
+    {
+      "name": "6) List All Datasets",
+      "description": "List all datasets owned by the authenticated user to confirm the new dataset appears in the registry.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('list datasets: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('response is an array', function () { pm.expect(json).to.be.an('array'); });",
+              "pm.test('our dataset is in the list', function () {",
+              "  var id = pm.collectionVariables.get('datasetId');",
+              "  var found = json.some(function(d) { return d.dataset_id === id; });",
+              "  pm.expect(found).to.be.true;",
+              "});",
+              "console.log('User owns', json.length, 'dataset(s). IDs:', json.map(function(d){ return d.dataset_id; }).join(', '));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/v1/datasets"
+      }
+    }
+  ]
+}

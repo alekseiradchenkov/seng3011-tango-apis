@@ -49,7 +49,27 @@ jobs:
 
       - name: Bootstrap (first-time only)
         working-directory: cdk
-        run: npx cdk bootstrap
+        run: |
+          TOOLKIT_STATUS=$(aws cloudformation describe-stacks \
+            --stack-name CDKToolkit \
+            --region "${AWS_REGION}" \
+            --query 'Stacks[0].StackStatus' \
+            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+
+          echo "CDKToolkit stack status: ${TOOLKIT_STATUS}"
+
+          if [[ "${TOOLKIT_STATUS}" == "CREATE_COMPLETE" || "${TOOLKIT_STATUS}" == "UPDATE_COMPLETE" ]]; then
+            echo "CDKToolkit is already bootstrapped and healthy — skipping."
+          else
+            if [[ "${TOOLKIT_STATUS}" == "ROLLBACK_FAILED" || "${TOOLKIT_STATUS}" == "ROLLBACK_COMPLETE" || "${TOOLKIT_STATUS}" == "CREATE_FAILED" ]]; then
+              echo "CDKToolkit stack is in a failed state (${TOOLKIT_STATUS}). Deleting before re-bootstrapping..."
+              aws cloudformation delete-stack --stack-name CDKToolkit --region "${AWS_REGION}"
+              aws cloudformation wait stack-delete-complete --stack-name CDKToolkit --region "${AWS_REGION}" || true
+            fi
+            echo "Bootstrapping CDK environment..."
+            AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+            npx cdk bootstrap "aws://${AWS_ACCOUNT}/${AWS_REGION}"
+          fi
 
       - name: Deploy
         working-directory: cdk

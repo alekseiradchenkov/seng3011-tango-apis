@@ -188,7 +188,10 @@ export class FinancialEventsStack extends Stack {
         bundling: {
           nodeModules: [
             "@vendia/serverless-express",
+            "aws-jwt-verify",
+            "cors",
             "express",
+            "morgan",
             "swagger-ui-express",
             "yamljs",
           ],
@@ -208,6 +211,9 @@ export class FinancialEventsStack extends Stack {
           EVENT_INDEX_TABLE: eventIndexTable.tableName,
           EVENTS_BUCKET: eventsBucket.bucketName,
           CHARTS_TABLE: chartsTable.tableName,
+          ...(allowAuthBypass ? { AUTH_BYPASS: "true" } : {}),
+          COGNITO_USER_POOL_ID: userPool.userPoolId,
+          COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
         },
       }
     );
@@ -362,6 +368,11 @@ export class FinancialEventsStack extends Stack {
     });
     httpApi.addRoutes({
       path: "/v1/charts/{chartId}",
+      methods: [apigw.HttpMethod.GET, apigw.HttpMethod.DELETE],
+      integration: visualisationIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/v1/charts/{chartId}/render",
       methods: [apigw.HttpMethod.GET],
       integration: visualisationIntegration,
     });

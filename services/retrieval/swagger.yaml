@@ -163,7 +163,7 @@ definitions:
       $ref: "#/definitions/AdageData"
 
 paths:
-  /v0/docs:
+  /v0/retrieval/docs:
     get:
       tags: ["General"]
       summary: Retrieve Swagger documentation
@@ -175,7 +175,7 @@ paths:
             type: string
             example: "<!DOCTYPE html><html>...</html>"
 
-  /v0/status:
+  /v0/retrieval/status:
     get:
       tags: ["General"]
       summary: "Check API health"

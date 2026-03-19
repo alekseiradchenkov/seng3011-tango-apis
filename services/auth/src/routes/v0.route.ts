@@ -20,10 +20,10 @@ for (const candidate of [
   }
 }
 
-router.use("/retrieval/docs", swaggerui.serve);
-router.get("/retrieval/docs", swaggerui.setup(swaggerDoc ?? {}));
+router.use("/auth/docs", swaggerui.serve);
+router.get("/auth/docs", swaggerui.setup(swaggerDoc ?? {}));
 
-router.get("/retrieval/status", (_req: Request, res: Response) => {
+router.get("/auth/status", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 

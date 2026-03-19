@@ -153,6 +153,16 @@ export class FinancialEventsStack extends Stack {
           "yamljs",
         ],
         externalModules: ["@aws-sdk/*"],
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (inputDir: string, outputDir: string) => [
+            `cp \"${path.join(inputDir, "swagger.yaml")}\" \"${path.join(
+              outputDir,
+              "swagger.yaml"
+            )}\"`,
+          ],
+        },
       },
       environment: {
         EVENT_INDEX_TABLE: eventIndexTable.tableName,
@@ -245,8 +255,20 @@ export class FinancialEventsStack extends Stack {
           "cors",
           "express",
           "morgan",
+          "swagger-ui-express",
+          "yamljs",
         ],
         externalModules: ["@aws-sdk/*"],
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (inputDir: string, outputDir: string) => [
+            `cp \"${path.join(inputDir, "swagger.yaml")}\" \"${path.join(
+              outputDir,
+              "swagger.yaml"
+            )}\"`,
+          ],
+        },
       },
       environment: {
         COGNITO_USER_POOL_ID: userPool.userPoolId,
@@ -404,6 +426,21 @@ export class FinancialEventsStack extends Stack {
     });
 
     // Auth routes
+    httpApi.addRoutes({
+      path: "/v0/auth/docs",
+      methods: [apigw.HttpMethod.GET],
+      integration: authIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/v0/auth/docs/{proxy+}",
+      methods: [apigw.HttpMethod.GET],
+      integration: authIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/v0/auth/status",
+      methods: [apigw.HttpMethod.GET],
+      integration: authIntegration,
+    });
     httpApi.addRoutes({
       path: "/v1/auth/{proxy+}",
       methods: [apigw.HttpMethod.ANY],

@@ -4,6 +4,7 @@ import {
   StackProps,
   Duration,
   RemovalPolicy,
+  CfnOutput,
   aws_apigatewayv2 as apigw,
   aws_apigatewayv2_integrations as apigwIntegrations,
   aws_dynamodb as dynamodb,
@@ -382,6 +383,26 @@ export class FinancialEventsStack extends Stack {
       path: "/v1/auth/{proxy+}",
       methods: [apigw.HttpMethod.ANY],
       integration: authIntegration,
+    });
+
+    // Output the API URL so it is visible in the CDK deploy output and
+    // in the CloudFormation console under the Outputs tab.
+    new CfnOutput(this, "ApiUrl", {
+      value: httpApi.url ?? "",
+      description: "Financial Events API base URL",
+      exportName: "FinancialEventsApiUrl",
+    });
+
+    new CfnOutput(this, "CognitoUserPoolId", {
+      value: userPool.userPoolId,
+      description: "Cognito User Pool ID",
+      exportName: "FinancialEventsCognitoUserPoolId",
+    });
+
+    new CfnOutput(this, "CognitoClientId", {
+      value: userPoolClient.userPoolClientId,
+      description: "Cognito User Pool Client ID",
+      exportName: "FinancialEventsCognitoClientId",
     });
   }
 }

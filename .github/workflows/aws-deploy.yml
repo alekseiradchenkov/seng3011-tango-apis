@@ -80,5 +80,22 @@ jobs:
 
       - name: Deploy
         working-directory: cdk
-        run: npx cdk deploy --require-approval never
+        run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Print API URL
+        working-directory: cdk
+        run: |
+          API_URL=$(node -e "const o=require('./cdk-outputs.json'); console.log(Object.values(o)[0].ApiUrl ?? '')")
+          # Strip trailing slash for consistent usage
+          API_URL="${API_URL%/}"
+          echo ""
+          echo "============================================================"
+          echo "  Financial Events API deployed successfully!"
+          echo "  Base URL: ${API_URL}"
+          echo ""
+          echo "  Test with Newman:"
+          echo "  npx newman run postman/demo-flow-1-data-ingestion.collection.json \\"
+          echo "    --env-var baseUrl=${API_URL}"
+          echo "============================================================"
+          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
 

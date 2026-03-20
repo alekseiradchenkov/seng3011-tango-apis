@@ -16,6 +16,11 @@ try {
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(spec));
 
+// Root of the API — same host as /docs and /status (no extra API Gateway route needed for clients that follow redirects).
+app.get("/", (_req, res) => {
+  res.redirect(302, "/docs");
+});
+
 app.get("/status", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });

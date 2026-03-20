@@ -1,9 +1,20 @@
 name: aws-deploy
 
+# Push to main → deploy dev only (no inputs; prod never runs).
+# Manual "Run workflow" → deploy dev; set deploy_prod=true to also deploy prod after dev.
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      deploy_prod:
+        description: "Deploy to production after dev deploy (manual runs only; ignored on push)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   deploy-dev:
@@ -94,7 +105,7 @@ jobs:
           echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
 
   deploy-prod:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_prod == 'true'
     needs: deploy-dev
     runs-on: ubuntu-latest
     timeout-minutes: 30

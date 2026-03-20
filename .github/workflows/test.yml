@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: "test-${{ matrix.service }}"
+    name: "${{ matrix.service }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:

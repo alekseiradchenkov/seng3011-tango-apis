@@ -1,0 +1,596 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "Financial Events API",
+    "description": "Combined API for the SENG3011 Team Tango project. Includes authentication, data collection, data retrieval, and visualisation services."
+  },
+  "schemes": ["https"],
+  "basePath": "/",
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Provide JWT token as: \"Bearer <token>\""
+    }
+  },
+  "tags": [
+    { "name": "General", "description": "Health check and documentation endpoints." },
+    { "name": "Auth", "description": "User signup, login, and logout via Cognito." },
+    { "name": "Collection", "description": "Create/manage datasets and fetch/manage events." },
+    { "name": "Retrieval", "description": "Retrieve datasets, events, and statistics." },
+    { "name": "Visualisation", "description": "Render charts from dataset events." }
+  ],
+  "definitions": {
+    "StatusResponse": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "example": "ok" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": { "type": "string", "example": "BAD_REQUEST" },
+        "message": { "type": "string", "example": "Invalid request." }
+      }
+    },
+    "AuthCredentials": {
+      "type": "object",
+      "required": ["email", "password"],
+      "properties": {
+        "email": { "type": "string", "format": "email", "example": "user@example.com" },
+        "password": { "type": "string", "example": "MyP@ssw0rd1!" }
+      }
+    },
+    "LoginResponse": {
+      "type": "object",
+      "required": ["accessToken", "idToken", "refreshToken"],
+      "properties": {
+        "accessToken": { "type": "string", "description": "Cognito access token." },
+        "idToken": { "type": "string", "description": "Cognito ID token." },
+        "refreshToken": { "type": "string", "description": "Cognito refresh token." }
+      }
+    },
+    "TimeObject": {
+      "type": "object",
+      "required": ["timestamp", "timezone"],
+      "properties": {
+        "timestamp": { "type": "string", "example": "2026-03-01 00:00:00" },
+        "duration": { "type": "integer", "example": 1 },
+        "duration_unit": { "type": "string", "example": "day" },
+        "timezone": { "type": "string", "example": "UTC" }
+      }
+    },
+    "AdageEvent": {
+      "type": "object",
+      "required": ["time_object", "event_type", "attribute"],
+      "properties": {
+        "time_object": { "$ref": "#/definitions/TimeObject" },
+        "event_type": { "type": "string", "example": "stock_ohlc" },
+        "attribute": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "DatasetMetadata": {
+      "type": "object",
+      "properties": {
+        "dataset_id": { "type": "string", "example": "dataset_1741651200000_1" },
+        "name": { "type": "string", "example": "Tech Stocks Q1 2026" },
+        "description": { "type": "string", "example": "Data for listed tech companies" },
+        "data_source": { "type": "string", "example": "YahooFinance" },
+        "dataset_type": { "type": "string", "example": "daily_stock_ohlc_data" },
+        "time_object": { "$ref": "#/definitions/TimeObject" }
+      }
+    },
+    "AdageData": {
+      "type": "object",
+      "required": ["dataset_id", "data_source", "dataset_type", "time_object", "events"],
+      "properties": {
+        "dataset_id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "data_source": { "type": "string" },
+        "dataset_type": { "type": "string" },
+        "time_object": { "$ref": "#/definitions/TimeObject" },
+        "events": { "type": "array", "items": { "$ref": "#/definitions/AdageEvent" } }
+      }
+    },
+    "DatasetCreateRequest": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "example": "Tech Stocks Q1 2026" },
+        "description": { "type": "string", "example": "Data for listed tech companies" }
+      }
+    },
+    "DatasetUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "EventsRequest": {
+      "type": "object",
+      "required": ["symbols", "exchange"],
+      "description": "Raw OHLC events are fetched for these symbols, then deterministic derived events are generated and stored alongside them.",
+      "properties": {
+        "symbols": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Bare ticker symbols (no exchange suffix).",
+          "example": ["AAPL", "MSFT"]
+        },
+        "exchange": {
+          "type": "string",
+          "description": "Exchange code (e.g. XNAS for NASDAQ).",
+          "example": "XNAS"
+        },
+        "date_from": { "type": "string", "format": "date", "example": "2026-02-01" },
+        "date_to": { "type": "string", "format": "date", "example": "2026-03-01" }
+      }
+    },
+    "RemoveEventsRequest": {
+      "type": "object",
+      "properties": {
+        "symbols": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fully-qualified symbols to remove (e.g. AAPL.XNAS).",
+          "example": ["AAPL.XNAS"]
+        },
+        "date_from": { "type": "string", "format": "date" },
+        "date_to": { "type": "string", "format": "date" }
+      }
+    },
+    "FetchEventsResponse": {
+      "type": "object",
+      "properties": {
+        "count": { "type": "integer", "example": 142 },
+        "raw_event_count": { "type": "integer", "example": 124 },
+        "derived_event_count": { "type": "integer", "example": 18 },
+        "event_type_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "example": {
+            "stock_ohlc": 124,
+            "price_jump": 7,
+            "price_drop": 5,
+            "volatility_spike": 4,
+            "trend_crossover": 2
+          }
+        },
+        "dataset": { "$ref": "#/definitions/AdageData" }
+      }
+    },
+    "RemoveEventsResponse": {
+      "type": "object",
+      "properties": {
+        "count": { "type": "integer", "example": 124 }
+      }
+    },
+    "DeleteResponse": {
+      "type": "object",
+      "properties": {
+        "count": { "type": "integer", "example": 1 }
+      }
+    },
+    "EventsResponse": {
+      "type": "object",
+      "properties": {
+        "retrieved": { "type": "integer", "example": 124 },
+        "dataset": { "$ref": "#/definitions/AdageData" }
+      }
+    },
+    "EventStatsResponse": {
+      "type": "object",
+      "properties": {
+        "total_events": { "type": "integer", "example": 124 },
+        "event_type_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "example": { "stock_ohlc": 120, "price_spike": 4 }
+        }
+      }
+    },
+    "DatasetListResponse": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/DatasetMetadata" }
+    }
+  },
+  "paths": {
+    "/status": {
+      "get": {
+        "tags": ["General"],
+        "summary": "Check API health",
+        "responses": {
+          "200": {
+            "description": "API status",
+            "schema": { "$ref": "#/definitions/StatusResponse" }
+          }
+        }
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new user",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/AuthCredentials" }
+          }
+        ],
+        "responses": {
+          "201": { "description": "User created", "schema": { "$ref": "#/definitions/StatusResponse" } },
+          "400": { "description": "Missing or invalid fields", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "409": { "description": "User already exists", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Signup failed", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login and receive Cognito tokens",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/AuthCredentials" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "schema": { "$ref": "#/definitions/LoginResponse" },
+            "examples": {
+              "application/json": {
+                "accessToken": "eyJraWQiOiJkZW1vLWFjY2Vzcy10b2tlbiIsInR5cCI6IkpXVCJ9.demo.signature",
+                "idToken": "eyJraWQiOiJkZW1vLWlkLXRva2VuIiwidHlwIjoiSldUIn0.demo.signature",
+                "refreshToken": "eyJjdHkiOiJKV1QiLCJ0eXAiOiJSZWZyZXNoIn0.demo.signature"
+              }
+            }
+          },
+          "400": { "description": "Missing or invalid fields", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "401": { "description": "Invalid credentials", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Login failure", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Invalidate the current access token",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": false,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "accessToken": {
+                  "type": "string",
+                  "description": "Access token to invalidate (alternative to Authorization header).",
+                  "example": "eyJraWQiOiJ...demo..."
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Logout successful", "schema": { "$ref": "#/definitions/StatusResponse" } },
+          "400": { "description": "Missing access token", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Logout failed", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/datasets": {
+      "get": {
+        "tags": ["Retrieval"],
+        "summary": "List all datasets (metadata only)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of datasets",
+            "schema": { "$ref": "#/definitions/DatasetListResponse" },
+            "examples": {
+              "application/json": [
+                {
+                  "dataset_id": "dataset_1741651200000_1",
+                  "name": "Tech Stocks Q1 2026",
+                  "description": "Data for listed tech companies",
+                  "data_source": "YahooFinance",
+                  "dataset_type": "daily_stock_ohlc_data",
+                  "time_object": { "timestamp": "2026-03-11T12:00:00.000Z", "timezone": "UTC" }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Collection"],
+        "summary": "Create a new dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/DatasetCreateRequest" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Dataset created",
+            "schema": { "$ref": "#/definitions/DatasetMetadata" },
+            "examples": {
+              "application/json": {
+                "dataset_id": "dataset_1741651200000_1",
+                "name": "Tech Stocks Q1 2026",
+                "description": "Data for listed tech companies",
+                "data_source": "YahooFinance",
+                "dataset_type": "daily_stock_ohlc_data",
+                "time_object": { "timestamp": "2026-03-11T12:00:00.000Z", "timezone": "UTC" }
+              }
+            }
+          },
+          "400": { "description": "Invalid parameters", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/datasets/{datasetId}": {
+      "get": {
+        "tags": ["Retrieval"],
+        "summary": "Retrieve dataset metadata (no events)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" }
+        ],
+        "responses": {
+          "200": { "description": "Dataset metadata", "schema": { "$ref": "#/definitions/DatasetMetadata" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      },
+      "put": {
+        "tags": ["Collection"],
+        "summary": "Update dataset metadata",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/DatasetUpdateRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Dataset updated", "schema": { "$ref": "#/definitions/DatasetMetadata" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      },
+      "delete": {
+        "tags": ["Collection"],
+        "summary": "Delete a dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" }
+        ],
+        "responses": {
+          "200": { "description": "Dataset deleted", "schema": { "$ref": "#/definitions/DeleteResponse" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/datasets/{datasetId}/events": {
+      "get": {
+        "tags": ["Retrieval"],
+        "summary": "Retrieve events from a dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "name": "start_date", "in": "query", "type": "string", "format": "date", "description": "Include events on or after this date.", "example": "2026-02-01" },
+          { "name": "end_date", "in": "query", "type": "string", "format": "date", "description": "Include events on or before this date.", "example": "2026-02-28" },
+          { "name": "companies", "in": "query", "type": "array", "items": { "type": "string" }, "collectionFormat": "csv", "description": "Filter by symbol.", "example": ["AAPL", "MSFT"] },
+          { "name": "event_type", "in": "query", "type": "string", "description": "Filter by event type.", "example": "stock_ohlc" },
+          { "name": "limit", "in": "query", "type": "integer", "description": "Maximum events to return (default 100, max 1000).", "example": 10 },
+          { "name": "sort", "in": "query", "type": "string", "enum": ["time"], "description": "Sort field.", "example": "time" },
+          { "name": "order", "in": "query", "type": "string", "enum": ["ASC", "DESC"], "description": "Sort order (default DESC).", "example": "ASC" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events retrieved",
+            "schema": { "$ref": "#/definitions/EventsResponse" },
+            "examples": {
+              "application/json": {
+                "retrieved": 2,
+                "dataset": {
+                  "dataset_id": "dataset_1741651200000_1",
+                  "name": "Tech Stocks Q1 2026",
+                  "description": "Data for listed tech companies",
+                  "data_source": "YahooFinance",
+                  "dataset_type": "daily_stock_ohlc_data",
+                  "time_object": { "timestamp": "2026-03-11T12:00:00.000Z", "timezone": "UTC" },
+                  "events": [
+                    {
+                      "time_object": { "timestamp": "2026-02-03 14:30:00.000", "timezone": "UTC" },
+                      "event_type": "stock_ohlc",
+                      "attribute": { "symbol": "AAPL.XNAS", "close": 186.7 }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      },
+      "put": {
+        "tags": ["Collection"],
+        "summary": "Fetch events from external API into dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/EventsRequest" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events fetched",
+            "schema": { "$ref": "#/definitions/FetchEventsResponse" },
+            "examples": {
+              "application/json": {
+                "count": 44,
+                "raw_event_count": 38,
+                "derived_event_count": 6,
+                "event_type_counts": {
+                  "stock_ohlc": 38,
+                  "price_jump": 2,
+                  "price_drop": 1,
+                  "volatility_spike": 2,
+                  "trend_crossover": 1
+                },
+                "dataset": {
+                  "dataset_id": "dataset_1741651200000_1",
+                  "name": "Tech Stocks Q1 2026",
+                  "description": "Data for listed tech companies",
+                  "data_source": "YahooFinance",
+                  "dataset_type": "daily_stock_ohlc_data",
+                  "time_object": { "timestamp": "2026-03-11T12:00:00.000Z", "timezone": "UTC" },
+                  "events": [
+                    {
+                      "time_object": { "timestamp": "2026-02-03 14:30:00.000", "timezone": "UTC" },
+                      "event_type": "stock_ohlc",
+                      "attribute": { "symbol": "AAPL.XNAS", "close": 186.7 }
+                    },
+                    {
+                      "time_object": { "timestamp": "2026-02-04 14:30:00.000", "timezone": "UTC" },
+                      "event_type": "price_jump",
+                      "attribute": { "symbol": "AAPL.XNAS", "pct_change_1d": 5.2143, "threshold": 5 }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid parameters", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      },
+      "delete": {
+        "tags": ["Collection"],
+        "summary": "Remove events from dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "in": "body", "name": "body", "required": false, "schema": { "$ref": "#/definitions/RemoveEventsRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Events removed", "schema": { "$ref": "#/definitions/RemoveEventsResponse" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/datasets/{datasetId}/events/stats": {
+      "get": {
+        "tags": ["Retrieval"],
+        "summary": "Retrieve event statistics for a dataset",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "name": "start_date", "in": "query", "type": "string", "format": "date", "example": "2026-02-01" },
+          { "name": "end_date", "in": "query", "type": "string", "format": "date", "example": "2026-02-28" },
+          { "name": "companies", "in": "query", "type": "array", "items": { "type": "string" }, "collectionFormat": "csv", "example": ["AAPL"] },
+          { "name": "event_type", "in": "query", "type": "string", "example": "stock_ohlc" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event statistics",
+            "schema": { "$ref": "#/definitions/EventStatsResponse" },
+            "examples": {
+              "application/json": {
+                "total_events": 142,
+                "event_type_counts": {
+                  "stock_ohlc": 124,
+                  "price_jump": 7,
+                  "price_drop": 5,
+                  "volatility_spike": 4,
+                  "trend_crossover": 2
+                }
+              }
+            }
+          },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/datasets/{datasetId}/export": {
+      "get": {
+        "tags": ["Retrieval"],
+        "summary": "Export dataset events as CSV",
+        "security": [{ "BearerAuth": [] }],
+        "produces": ["text/csv"],
+        "parameters": [
+          { "name": "datasetId", "in": "path", "required": true, "type": "string", "example": "dataset_1741651200000_1" },
+          { "name": "start_date", "in": "query", "type": "string", "format": "date", "example": "2026-02-01" },
+          { "name": "end_date", "in": "query", "type": "string", "format": "date", "example": "2026-02-28" },
+          { "name": "companies", "in": "query", "type": "array", "items": { "type": "string" }, "collectionFormat": "csv", "example": ["AAPL"] },
+          { "name": "event_type", "in": "query", "type": "string", "example": "stock_ohlc" },
+          { "name": "limit", "in": "query", "type": "integer", "example": 5 },
+          { "name": "order", "in": "query", "type": "string", "enum": ["ASC", "DESC"], "example": "DESC" }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV export",
+            "schema": { "type": "string" },
+            "examples": {
+              "text/csv": "symbol,open,high,low,close,volume,timestamp\nAAPL.XNAS,184.2,187.9,183.5,186.7,58230000,2026-02-03 14:30:00.000\n"
+            }
+          },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/charts": {
+      "get": {
+        "tags": ["Visualisation"],
+        "summary": "Render a chart as PNG image (stateless)",
+        "description": "Renders a chart from dataset events on-the-fly. Returns a PNG image.",
+        "security": [{ "BearerAuth": [] }],
+        "produces": ["image/png"],
+        "parameters": [
+          { "name": "dataset_id", "in": "query", "required": true, "type": "string", "description": "Dataset to visualize.", "example": "dataset_1741651200000_1" },
+          { "name": "type", "in": "query", "type": "string", "enum": ["line", "bar"], "default": "line", "description": "Chart type.", "example": "line" },
+          { "name": "x_axis", "in": "query", "type": "string", "enum": ["timestamp", "symbol"], "default": "timestamp", "description": "X axis dimension.", "example": "timestamp" },
+          { "name": "y_axis", "in": "query", "type": "string", "default": "close", "description": "Attribute to plot (close, open, high, low, volume).", "example": "close" },
+          { "name": "companies", "in": "query", "type": "string", "description": "Comma-separated symbols (bare e.g. AAPL, or full e.g. AAPL.XNAS).", "example": "AAPL,NVDA" },
+          { "name": "series_event_type", "in": "query", "type": "string", "default": "stock_ohlc", "description": "Event type to render. Default keeps primary chart series on underlying OHLC data.", "example": "stock_ohlc" },
+          { "name": "start_date", "in": "query", "type": "string", "format": "date", "description": "Filter events from this date.", "example": "2026-02-01" },
+          { "name": "end_date", "in": "query", "type": "string", "format": "date", "description": "Filter events until this date.", "example": "2026-02-28" },
+          { "name": "title", "in": "query", "type": "string", "description": "Chart title.", "example": "AAPL Close Price (Feb 2026)" }
+        ],
+        "responses": {
+          "200": { "description": "PNG image of the chart", "schema": { "type": "file" } },
+          "400": { "description": "Missing dataset_id", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    }
+  }
+}

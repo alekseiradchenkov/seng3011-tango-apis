@@ -1,128 +1,107 @@
-## SENG3011 Team Tango — Financial Events APIs
+## Financial Events APIs
 
-This repo is a small **AWS-style microservices system** for collecting, storing, retrieving, and visualising financial-event datasets.
+Local microservices stack for auth, collection, retrieval, docs, and chart visualisation.
 
-### Repository Structure
+## Prerequisites
 
-#### Services
+1. Install Node.js 20+ (includes npm): [Node.js Downloads](https://nodejs.org/en/download)
 
-- **`services/collection/`**: dataset creation + ingestion (`POST /v1/datasets`, `POST /v1/datasets/{datasetId}/events/fetch`)
-- **`services/retrieval/`**: dataset listing + querying + stats + export (GET endpoints)
-- **`services/visualisation/`**: visualisation endpoints (`/v1/events/*`, `/v1/charts/*`)
-- **`services/auth/`**: Cognito-backed user signup/login/logout (`/v1/auth/*`)
-- **`shared/`**: shared types/auth helpers used across services
+2. Install Docker Engine + Docker Compose: [Docker Engine Install](https://docs.docker.com/engine/install/) and [Docker Compose Install](https://docs.docker.com/compose/install/)
 
-#### Other
+3. Install AWS CLI v2.
 
-- **`cdk/`**: AWS CDK app that deploys the stack (API Gateway + Lambdas + DynamoDB + S3) into AWS/LocalStack
-- **`postman/`**: Postman collection(s) to exercise the APIs locally for developer testing
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip -q awscliv2.zip
+sudo ./aws/install
+aws --version
+```
 
-### Architecture (high level)
+4. Install LocalStack CLI.
 
-- Single **API Gateway HTTP API**
-- 3 **Lambda functions** (Express apps via `@vendia/serverless-express`):
-  - `collection`: creates datasets and ingests OHLC data from Yahoo Finance
-  - `retrieval`: lists/query datasets, stats, CSV export
-  - `visualisation`: placeholder visualisation endpoints
-- **DynamoDB**:
-  - `EventIndex` (dataset metadata and filters)
-  - `Charts` (visualisation-related data)
-- **S3**:
-  - Raw price data + per-dataset event snapshots
+```bash
+python3 -m pip install --user --upgrade localstack awscli-local
+~/.local/bin/localstack --version
+```
 
-CloudFormation (via CDK) is responsible for provisioning and naming resources across redeploys.
+5. Install CDK, `cdklocal`, and Newman globally.
 
-### Local development (LocalStack + CDK)
+```bash
+npm install -g aws-cdk aws-cdk-local newman
+cdk --version
+cdklocal --version
+newman --version
+```
 
-#### Prerequisites
+6. Create local `.env` from the required variables here: [Confluence env vars](https://unswcse.atlassian.net/wiki/x/cYCcX)
 
-- Docker and docker compose
-- Node.js 20+
-- AWS CLI installed and on `PATH`
-- Create a local `.env` file by copying the required environment variables from [Confluence env vars](https://unswcse.atlassian.net/wiki/x/cYCcX).
+## User Guide (LocalStack)
 
-All LocalStack resources use **dummy AWS credentials** and the default LocalStack account/region.
-
-#### One-time setup
-
-From the repo root (`seng3011-tango-apis`):
+1. Start LocalStack.
 
 ```bash
 docker compose up -d
-bash scripts/localstack-cdk-deploy.sh
 ```
 
-This will:
-
-- Start LocalStack (API Gateway, Lambda, DynamoDB, S3, Cognito, etc.)
-- Bootstrap CDK into LocalStack
-- Deploy the `FinancialEventsStack` into LocalStack (respecting any `AUTH_BYPASS` value set in your `.env`)
-- Discover the HTTP API ID and write `.localstack-api.env` at the repo root, e.g.:
-  - `API_ID=1b893d80`
-  - `BASE=http://localhost:4566/_aws/execute-api/1b893d80`
-
-On subsequent runs (after LocalStack is already running), you can just re-run:
+2. Deploy stack to LocalStack (bootstrap + deploy + API env output).
 
 ```bash
 bash scripts/localstack-cdk-deploy.sh
 ```
 
-It will update the stack if needed and refresh `.localstack-api.env`.
+3. Load generated API environment values.
 
-- By default (including in CI/AWS), `AUTH_BYPASS` is **false**, so all business Lambdas enforce full Cognito auth.
-- For LocalStack/local development, you can set `AUTH_BYPASS=true` in your `.env` before running the script to tell the collection/retrieval/visualisation Lambdas to skip strict Cognito checks and treat requests as coming from a local dev user.
+```bash
+source .localstack-api.env
+echo "$API_ID"
+echo "$BASE"
+```
 
-### Testing endpoints locally
+4. Run system-tests 1-5.
 
-**Option A: Newman (full E2E, recommended)**
+```bash
+# system-test-1
+newman run integration-tests/integration-test-1.collection.json --env-var apiId="$API_ID"
 
-1. Load the API ID and base URL that `scripts/localstack-cdk-deploy.sh` wrote:
+# system-test-2
+newman run integration-tests/integration-test-2.collection.json --env-var apiId="$API_ID"
 
-   ```bash
-   source .localstack-api.env
-   echo "API_ID=${API_ID}"
-   echo "BASE=${BASE}"
-   ```
+# system-test-3
+newman run integration-tests/integration-test-3.collection.json --env-var apiId="$API_ID"
 
-2. Run the Newman collection using this API ID:
+# system-test-4
+newman run integration-tests/integration-test-4.collection.json --env-var apiId="$API_ID"
 
-   ```bash
-   npx -y newman run postman/financial-events-localstack.collection.json --env-var apiId="${API_ID}"
-   ```
+# system-test-5
+newman run integration-tests/integration-test-5.collection.json --env-var apiId="$API_ID"
+```
 
-This runs an end-to-end flow against LocalStack:
-- signup/login via the `auth` service (Cognito-backed; in LocalStack, `signup` may occasionally return a 500 even though `login` still succeeds)
-- create dataset
-- fetch events (from Yahoo Finance)
-- list datasets
-- get events
-- get stats
-- export CSV
+## Per-Service Docker (Not Recommended)
 
-All dataset and retrieval steps are expected to pass when LocalStack + CDK + Yahoo Finance are reachable.
+As per assessment requirements, per service docker containers have been created. However, the localStack deployment flow is the recommended path as it is far more robust and accurate. With our localstack flow, we deploy the stack through our CDK + CloudFormation flow using the localstack docker container in our [docker-compose.yml] file and we mock AWS infrastructure end-to-end (API Gateway, Lambda, DynamoDB, S3, Cognito, IAM, etc.).
 
-**Option B: curl (quick checks)**
+With this in mind, you can run the per-service containers as follows:
 
-After running `scripts/localstack-cdk-deploy.sh` once in this LocalStack session:
+```bash
+# auth (host port 3001 -> container port 3000)
+docker build -t tango-auth ./services/auth
+docker run --rm -p 3001:3000 --env-file .env -e PORT=3000 tango-auth
 
-1. Ensure `.localstack-api.env` is loaded:
+# collection (host port 3002 -> container port 3000)
+docker build -t tango-collection ./services/collection
+docker run --rm -p 3002:3000 --env-file .env -e PORT=3000 tango-collection
 
-   ```bash
-   source .localstack-api.env
-   ```
+# retrieval (host port 3003 -> container port 3000)
+docker build -t tango-retrieval ./services/retrieval
+docker run --rm -p 3003:3000 --env-file .env -e PORT=3000 tango-retrieval
 
-2. Example (list datasets; if you deployed with `AUTH_BYPASS=true` in `.env`, the Lambdas will treat requests as coming from a local dev user):
+# visualisation (host port 3004 -> container port 3000)
+docker build -t tango-visualisation ./services/visualisation
+docker run --rm -p 3004:3000 --env-file .env -e PORT=3000 tango-visualisation
+```
 
-   ```bash
-   curl -sS -i "$BASE/v1/datasets"
-   ```
+## Notes
 
-### Auth & data source notes
-
-- **Local / LocalStack auth**:
-  - The `auth` microservice uses Cognito (or the LocalStack Cognito emulator) for `/v1/auth/signup` and `/v1/auth/login`.
-  - For local development, the core business Lambdas (`collection`, `retrieval`, `visualisation`) are typically deployed with `AUTH_BYPASS=true`, which skips strict Cognito JWT verification and treats incoming requests as a local user (no header required).
-- **Real AWS auth**:
-  - For production, deploy with `AUTH_BYPASS=false` and configure Cognito User Pool/User Pool Client environment variables; the shared auth helpers will enforce JWT verification using `aws-jwt-verify`.
-- **Market data source**:
-  - Collection uses Yahoo Finance’s **unofficial chart endpoint** to fetch daily OHLC data.
+- Routes are unversioned (for example: `/datasets`, `/charts`, `/docs`, `/status`).
+- `PUT /datasets/{id}/events` stores raw OHLC and deterministic derived events together.
+- `GET /charts` defaults to plotting underlying `stock_ohlc` data.

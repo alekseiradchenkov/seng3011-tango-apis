@@ -3,6 +3,8 @@ name: aws-deploy
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["**"]
   workflow_dispatch:
 
 jobs:
@@ -41,6 +43,7 @@ jobs:
           if-no-files-found: warn
 
   deploy-dev:
+    if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -129,6 +132,7 @@ jobs:
           echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
 
   deploy-prod:
+    if: github.event_name != 'pull_request'
     needs: deploy-dev
     runs-on: ubuntu-latest
     timeout-minutes: 30

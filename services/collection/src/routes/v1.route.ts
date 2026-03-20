@@ -18,11 +18,11 @@ import {
 
 const router = Router();
 
-function asyncHandler<T extends Request>(
-  fn: (req: T, res: Response, next: NextFunction) => Promise<void>,
+function asyncHandler(
+  fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>,
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
-    fn(req as T, res, next).catch(next);
+    fn(req as AuthRequest, res, next).catch(next);
   };
 }
 
@@ -31,7 +31,7 @@ router.use(checkAuth);
 
 router.post(
   "/datasets",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { name, description } = req.body;
 
     if (!assertValidParam(res, "name", name)) return;
@@ -47,7 +47,7 @@ router.post(
 
 router.put(
   "/datasets/:datasetId",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { name, description } = req.body;
 
     const dataset = updateDataset(req.userId, req.params.datasetId as string, {
@@ -64,7 +64,7 @@ router.put(
 
 router.delete(
   "/datasets/:datasetId",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const count = await deleteDataset(req.userId, req.params.datasetId as string);
     if (!assertDatasetCount(res, count)) return;
     res.status(200).json({ count });
@@ -73,7 +73,7 @@ router.delete(
 
 router.put(
   "/datasets/:datasetId/events",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { symbols, exchange, date_from, date_to } = req.body;
 
     if (!Array.isArray(symbols) || symbols.length === 0) {
@@ -112,7 +112,7 @@ router.put(
 
 router.delete(
   "/datasets/:datasetId/events",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { symbols, date_from, date_to } = req.body;
 
     const result = removeEvents(req.userId, req.params.datasetId as string, {

@@ -13,11 +13,11 @@ import {
 
 const router = Router();
 
-function asyncHandler<T extends Request>(
-  fn: (req: T, res: Response, next: NextFunction) => Promise<void>,
+function asyncHandler(
+  fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>,
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
-    fn(req as T, res, next).catch(next);
+    fn(req as AuthRequest, res, next).catch(next);
   };
 }
 
@@ -25,14 +25,14 @@ router.use(checkAuth);
 
 router.get(
   "/datasets",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     res.status(200).json(await getDatasets(req.userId));
   }),
 );
 
 router.get(
   "/datasets/:datasetId",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const result = await getDataset(req.userId, req.params.datasetId as string);
     if (!result) {
       res.status(404).json({ error: "DATASET_NOT_FOUND", message: "Invalid dataset id." });
@@ -44,7 +44,7 @@ router.get(
 
 router.get(
   "/datasets/:datasetId/events",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const params: EventQueryParams = req.query;
     const result = await getEvents(req.userId, req.params.datasetId as string, params);
     if (!result) {
@@ -57,7 +57,7 @@ router.get(
 
 router.get(
   "/datasets/:datasetId/events/stats",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const params: EventQueryParams = req.query;
     const result = await getEventStats(req.userId, req.params.datasetId as string, params);
     if (!result) {
@@ -70,7 +70,7 @@ router.get(
 
 router.get(
   "/datasets/:datasetId/export",
-  asyncHandler<AuthRequest>(async (req, res) => {
+  asyncHandler(async (req, res) => {
     const params: EventQueryParams = req.query;
     const csvData = await exportEventsAsCsv(req.userId, req.params.datasetId as string, params);
     if (csvData === null) {

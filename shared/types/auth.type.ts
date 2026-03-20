@@ -1,5 +1,4 @@
-import { Request } from "express";
+import type { Request } from "express";
 
-export interface AuthRequest extends Request {
-  userId: string;
-}
+/** Express 5 `Request` is generic; intersection avoids `extends` incompatibilities with `asyncHandler`. */
+export type AuthRequest = Request & { userId: string };

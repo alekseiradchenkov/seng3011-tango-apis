@@ -6,9 +6,99 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-dev:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: dev
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+    outputs:
+      api_url: ${{ steps.output.outputs.api_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure AWS credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
+            echo "Missing AWS credentials in GitHub Secrets." >&2
+            exit 1
+          fi
+          echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> "$GITHUB_ENV"
+          if [ -n "${AWS_SESSION_TOKEN}" ]; then
+            echo "AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install service dependencies
+        run: |
+          for svc in auth collection retrieval visualisation; do
+            echo "Installing $svc..."
+            npm ci --prefix "services/$svc"
+          done
+
+      - name: Install CDK deps
+        working-directory: cdk
+        run: npm ci
+
+      - name: Bootstrap CDK (if needed)
+        working-directory: cdk
+        run: |
+          TOOLKIT_STATUS=$(aws cloudformation describe-stacks \
+            --stack-name CDKToolkit \
+            --region "${AWS_REGION}" \
+            --query 'Stacks[0].StackStatus' \
+            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+
+          echo "CDKToolkit stack status: ${TOOLKIT_STATUS}"
+
+          if [[ "${TOOLKIT_STATUS}" == "CREATE_COMPLETE" || "${TOOLKIT_STATUS}" == "UPDATE_COMPLETE" ]]; then
+            echo "CDKToolkit is already bootstrapped — skipping."
+          else
+            if [[ "${TOOLKIT_STATUS}" == "ROLLBACK_FAILED" || "${TOOLKIT_STATUS}" == "ROLLBACK_COMPLETE" || "${TOOLKIT_STATUS}" == "CREATE_FAILED" ]]; then
+              echo "CDKToolkit stack is in a failed state. Deleting before re-bootstrapping..."
+              aws cloudformation delete-stack --stack-name CDKToolkit --region "${AWS_REGION}"
+              aws cloudformation wait stack-delete-complete --stack-name CDKToolkit --region "${AWS_REGION}" || true
+            fi
+            echo "Bootstrapping CDK environment..."
+            AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+            npx cdk bootstrap "aws://${AWS_ACCOUNT}/${AWS_REGION}"
+          fi
+
+      - name: Deploy to dev
+        working-directory: cdk
+        run: npx cdk deploy --context stage=dev --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Print dev API URL
+        id: output
+        working-directory: cdk
+        run: |
+          API_URL=$(node -e "const o=require('./cdk-outputs.json'); console.log(Object.values(o)[0].ApiUrl ?? '')")
+          API_URL="${API_URL%/}"
+          echo ""
+          echo "============================================================"
+          echo "  DEV deployment successful!"
+          echo "  Base URL: ${API_URL}"
+          echo "============================================================"
+          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
+
+  deploy-prod:
+    if: github.event_name != 'pull_request'
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
@@ -30,7 +120,6 @@ jobs:
         run: |
           if [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
             echo "Missing AWS credentials in GitHub Secrets." >&2
-            echo "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and optionally AWS_SESSION_TOKEN)." >&2
             exit 1
           fi
           echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> "$GITHUB_ENV"
@@ -38,10 +127,6 @@ jobs:
           if [ -n "${AWS_SESSION_TOKEN}" ]; then
             echo "AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}" >> "$GITHUB_ENV"
           fi
-
-      - name: Validate deploy configuration
-        run: |
-          echo "Region: ${AWS_REGION}"
 
       - name: Install service dependencies
         run: |
@@ -54,48 +139,21 @@ jobs:
         working-directory: cdk
         run: npm ci
 
-      - name: Bootstrap (first-time only)
+      - name: Deploy to production
         working-directory: cdk
-        run: |
-          TOOLKIT_STATUS=$(aws cloudformation describe-stacks \
-            --stack-name CDKToolkit \
-            --region "${AWS_REGION}" \
-            --query 'Stacks[0].StackStatus' \
-            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+        run: npx cdk deploy --context stage=prod --require-approval never --outputs-file cdk-outputs.json
 
-          echo "CDKToolkit stack status: ${TOOLKIT_STATUS}"
-
-          if [[ "${TOOLKIT_STATUS}" == "CREATE_COMPLETE" || "${TOOLKIT_STATUS}" == "UPDATE_COMPLETE" ]]; then
-            echo "CDKToolkit is already bootstrapped and healthy — skipping."
-          else
-            if [[ "${TOOLKIT_STATUS}" == "ROLLBACK_FAILED" || "${TOOLKIT_STATUS}" == "ROLLBACK_COMPLETE" || "${TOOLKIT_STATUS}" == "CREATE_FAILED" ]]; then
-              echo "CDKToolkit stack is in a failed state (${TOOLKIT_STATUS}). Deleting before re-bootstrapping..."
-              aws cloudformation delete-stack --stack-name CDKToolkit --region "${AWS_REGION}"
-              aws cloudformation wait stack-delete-complete --stack-name CDKToolkit --region "${AWS_REGION}" || true
-            fi
-            echo "Bootstrapping CDK environment..."
-            AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-            npx cdk bootstrap "aws://${AWS_ACCOUNT}/${AWS_REGION}"
-          fi
-
-      - name: Deploy
-        working-directory: cdk
-        run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
-
-      - name: Print API URL
+      - name: Print production API URL
         working-directory: cdk
         run: |
           API_URL=$(node -e "const o=require('./cdk-outputs.json'); console.log(Object.values(o)[0].ApiUrl ?? '')")
-          # Strip trailing slash for consistent usage
           API_URL="${API_URL%/}"
           echo ""
           echo "============================================================"
-          echo "  Financial Events API deployed successfully!"
+          echo "  PRODUCTION deployment successful!"
           echo "  Base URL: ${API_URL}"
           echo ""
           echo "  Test with Newman:"
-          echo "  npx newman run postman/demo-flow-1-data-ingestion.collection.json \\"
+          echo "  npx newman run integration-tests/integration-test-2.collection.json \\"
           echo "    --env-var baseUrl=${API_URL}"
           echo "============================================================"
-          echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
-

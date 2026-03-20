@@ -1,15 +1,17 @@
-name: lint
+name: test
 
 on:
   pull_request:
     branches: ["**"]
+  push:
+    branches: ["main"]
 
 jobs:
-  lint:
+  test:
     name: "${{ matrix.service }}"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
-      # Run all services in parallel; don't cancel others if one fails.
       fail-fast: false
       matrix:
         service: [auth, collection, retrieval, visualisation]
@@ -32,12 +34,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: ESLint
-        run: npm run lint
+      - name: Run tests with coverage
+        run: npm test -- --coverage
 
-      - name: TypeScript type-check
-        # Informational — shows type errors without failing the build.
-        # Pre-existing structural issues in the shared/ module resolution
-        # mean tsc cannot fully resolve all types from each service directory.
-        run: npm run tsc -- --noEmit
-        continue-on-error: true
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.service }}
+          path: services/${{ matrix.service }}/coverage
+          if-no-files-found: warn

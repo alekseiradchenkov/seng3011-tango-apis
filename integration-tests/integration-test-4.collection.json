@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "a1b2c3d4-0003-4000-8000-demo-flow-0003",
-    "name": "Demo Flow 3 — CSV Data Export Pipeline",
-    "description": "User Story: An analyst ingests market data then exports it in CSV format for downstream processing (e.g. Excel, Python pandas). Multiple export filters are demonstrated.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest TSLA + AMZN events for Feb 2026\n  3. Export all events as CSV (full dataset)\n  4. Export first 10 events in chronological order (paginated)\n  5. Export only TSLA events (company-filtered)\n  6. Export only AMZN events within a specific date range\n  7. Update dataset name\n  8. Delete dataset (cleanup)\n\nRun with Newman:\n  npx newman run postman/demo-flow-3-csv-export.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "name": "Integration Test 4 — CSV Export Pipeline",
+    "description": "User Story: An analyst ingests market data then exports it in CSV format for downstream processing (e.g. Excel, Python pandas). Multiple export filters are demonstrated.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest TSLA + AMZN events for Feb 2026\n  3. Export all events as CSV (full dataset)\n  4. Export first 10 events in chronological order (paginated)\n  5. Export only TSLA events (company-filtered)\n  6. Export only AMZN events within a specific date range\n  7. Update dataset name\n  8. Delete dataset (cleanup)\n\nRun with Newman:\n  npx newman run integration-tests/integration-test-4.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -40,7 +40,7 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": "{{baseUrl}}/v1/auth/login"
+        "url": "{{baseUrl}}/auth/login"
       }
     },
     {
@@ -71,7 +71,7 @@
           "mode": "raw",
           "raw": "{\n  \"name\": \"Export Demo — TSLA & AMZN\",\n  \"description\": \"Dataset created for CSV export demonstration\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets"
+        "url": "{{baseUrl}}/datasets"
       }
     },
     {
@@ -85,14 +85,21 @@
             "exec": [
               "pm.test('fetch events: 200 OK', function () { pm.response.to.have.status(200); });",
               "var json = pm.response.json();",
-              "pm.test('events ingested', function () { pm.expect(json.count).to.be.above(0); });",
-              "console.log('Ingested', json.count, 'events.');"
+              "pm.test('events ingested', function () {",
+              "  pm.expect(json.count).to.be.above(0);",
+              "  pm.expect(json.raw_event_count).to.be.a('number').and.above(0);",
+              "  pm.expect(json.derived_event_count).to.be.a('number').and.at.least(0);",
+              "  pm.expect(json.event_type_counts).to.be.an('object');",
+              "  pm.expect(json.event_type_counts.stock_ohlc).to.equal(json.raw_event_count);",
+              "  pm.expect(json.count).to.equal(json.raw_event_count + json.derived_event_count);",
+              "});",
+              "console.log('Ingested raw=', json.raw_event_count, 'derived=', json.derived_event_count, 'total=', json.count);"
             ]
           }
         }
       ],
       "request": {
-        "method": "POST",
+        "method": "PUT",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
           { "key": "Authorization", "value": "Bearer {{accessToken}}" }
@@ -101,7 +108,7 @@
           "mode": "raw",
           "raw": "{\n  \"symbols\": [\"TSLA\", \"AMZN\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-28\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
       }
     },
     {
@@ -135,7 +142,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/export"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/export"
       }
     },
     {
@@ -164,9 +171,9 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
         "url": {
-          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/export?limit=10&order=ASC",
+          "raw": "{{baseUrl}}/datasets/{{datasetId}}/export?limit=10&order=ASC",
           "host": ["{{baseUrl}}"],
-          "path": ["v1", "datasets", "{{datasetId}}", "export"],
+          "path": ["datasets", "{{datasetId}}", "export"],
           "query": [
             { "key": "limit", "value": "10" },
             { "key": "order", "value": "ASC" }
@@ -201,9 +208,9 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
         "url": {
-          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/export?companies=TSLA",
+          "raw": "{{baseUrl}}/datasets/{{datasetId}}/export?companies=TSLA",
           "host": ["{{baseUrl}}"],
-          "path": ["v1", "datasets", "{{datasetId}}", "export"],
+          "path": ["datasets", "{{datasetId}}", "export"],
           "query": [
             { "key": "companies", "value": "TSLA" }
           ]
@@ -234,9 +241,9 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
         "url": {
-          "raw": "{{baseUrl}}/v1/datasets/{{datasetId}}/export?companies=AMZN&start_date=2026-02-15&end_date=2026-02-28",
+          "raw": "{{baseUrl}}/datasets/{{datasetId}}/export?companies=AMZN&start_date=2026-02-15&end_date=2026-02-28",
           "host": ["{{baseUrl}}"],
-          "path": ["v1", "datasets", "{{datasetId}}", "export"],
+          "path": ["datasets", "{{datasetId}}", "export"],
           "query": [
             { "key": "companies",   "value": "AMZN" },
             { "key": "start_date",  "value": "2026-02-15" },
@@ -274,7 +281,7 @@
           "mode": "raw",
           "raw": "{\n  \"name\": \"Export Demo — TSLA & AMZN (exported)\",\n  \"description\": \"Exported to CSV on 2026-03-02\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}"
       }
     },
     {
@@ -297,7 +304,7 @@
       "request": {
         "method": "DELETE",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}"
       }
     }
   ]

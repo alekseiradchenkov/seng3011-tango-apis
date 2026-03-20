@@ -37,7 +37,7 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": "{{baseUrl}}/v1/auth/signup"
+        "url": "{{baseUrl}}/auth/signup"
       }
     },
     {
@@ -67,7 +67,7 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": "{{baseUrl}}/v1/auth/login"
+        "url": "{{baseUrl}}/auth/login"
       }
     },
     {
@@ -96,7 +96,7 @@
           "mode": "raw",
           "raw": "{\n  \"name\": \"E2E dataset\",\n  \"description\": \"created by Postman collection\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets"
+        "url": "{{baseUrl}}/datasets"
       }
     },
     {
@@ -109,13 +109,20 @@
             "exec": [
               "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
               "var json = pm.response.json();",
-              "pm.test('count is present', function () { pm.expect(json.count).to.be.a('number'); });"
+              "pm.test('count and derived/raw counters are present', function () {",
+              "  pm.expect(json.count).to.be.a('number');",
+              "  pm.expect(json.raw_event_count).to.be.a('number');",
+              "  pm.expect(json.derived_event_count).to.be.a('number');",
+              "  pm.expect(json.event_type_counts).to.be.an('object');",
+              "  pm.expect(json.event_type_counts.stock_ohlc).to.equal(json.raw_event_count);",
+              "  pm.expect(json.count).to.equal(json.raw_event_count + json.derived_event_count);",
+              "});"
             ]
           }
         }
       ],
       "request": {
-        "method": "POST",
+        "method": "PUT",
         "header": [
           { "key": "content-type", "value": "application/json" },
           { "key": "Authorization", "value": "Bearer {{accessToken}}" }
@@ -124,7 +131,7 @@
           "mode": "raw",
           "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-03\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
       }
     },
     {
@@ -145,7 +152,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets"
+        "url": "{{baseUrl}}/datasets"
       }
     },
     {
@@ -167,7 +174,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events?limit=10&sort=time&order=ASC"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events?limit=10&sort=time&order=ASC&event_type=stock_ohlc"
       }
     },
     {
@@ -188,7 +195,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/stats"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events/stats"
       }
     },
     {
@@ -209,7 +216,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/export?limit=5"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/export?limit=5"
       }
     }
   ]

@@ -1,0 +1,226 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-0004-4000-8000-demo-flow-0004",
+    "name": "Integration Test 5 — Chart Visualisation",
+    "description": "User Story: An analyst ingests market data then renders charts directly from the dataset events using the stateless Visualisation API.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest AAPL + NVDA events for Feb 2026\n  3. Render a line chart of AAPL close prices\n  4. Render a bar chart of NVDA volume\n  5. Render a filtered chart (specific date range)\n\nRun with Newman:\n  npx newman run integration-tests/integration-test-5.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiId",       "value": "77e5a0c0" },
+    { "key": "baseUrl",     "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
+    { "key": "email",       "value": "demo.analyst@example.com" },
+    { "key": "password",    "value": "DemoP@ssw0rd1!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "datasetId",   "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1) Log In",
+      "description": "Authenticate and capture the Cognito access token.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', json.accessToken);",
+              "pm.test('accessToken captured', function () {",
+              "  pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "2a) Create Dataset — Chart Demo",
+      "description": "Create a dataset to back our charts.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create dataset: 201 Created', function () { pm.response.to.have.status(201); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('datasetId', json.dataset_id);",
+              "pm.test('datasetId captured', function () { pm.expect(json.dataset_id).to.be.a('string').and.not.empty; });",
+              "console.log('Dataset created:', json.dataset_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Chart Demo — AAPL & NVDA Feb 2026\",\n  \"description\": \"Dataset used to power price charts in the visualisation demo\"\n}"
+        },
+        "url": "{{baseUrl}}/datasets"
+      }
+    },
+    {
+      "name": "2b) Ingest Events — AAPL + NVDA, Feb 2026",
+      "description": "Populate the dataset with daily OHLC data for Apple and NVIDIA.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('fetch events: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events ingested', function () {",
+              "  pm.expect(json.count).to.be.above(0);",
+              "  pm.expect(json.raw_event_count).to.be.a('number').and.above(0);",
+              "  pm.expect(json.derived_event_count).to.be.a('number').and.at.least(0);",
+              "  pm.expect(json.event_type_counts).to.be.an('object');",
+              "  pm.expect(json.event_type_counts.stock_ohlc).to.equal(json.raw_event_count);",
+              "  pm.expect(json.count).to.equal(json.raw_event_count + json.derived_event_count);",
+              "});",
+              "console.log('Ingested raw=', json.raw_event_count, 'derived=', json.derived_event_count, 'total=', json.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"NVDA\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-28\"\n}"
+        },
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
+      }
+    },
+    {
+      "name": "3) Render Line Chart — Close Prices",
+      "description": "Render a line chart showing close prices for all events in the dataset. Returns a PNG image.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('render chart: 200 OK', function () { pm.response.to.have.status(200); });",
+              "pm.test('content-type is image/png', function () {",
+              "  pm.expect(pm.response.headers.get('content-type')).to.include('image/png');",
+              "});",
+              "pm.test('response has binary content', function () {",
+              "  pm.expect(pm.response.stream.length).to.be.above(100);",
+              "});",
+              "console.log('Chart PNG size:', pm.response.stream.length, 'bytes.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=line&y_axis=close&series_event_type=stock_ohlc&title=Close%20Prices",
+          "host": ["{{baseUrl}}"],
+          "path": ["charts"],
+          "query": [
+            { "key": "dataset_id", "value": "{{datasetId}}" },
+            { "key": "type", "value": "line" },
+            { "key": "y_axis", "value": "close" },
+            { "key": "series_event_type", "value": "stock_ohlc" },
+            { "key": "title", "value": "Close Prices" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4) Render Bar Chart — Volume",
+      "description": "Render a bar chart showing trading volume for all events in the dataset.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('render chart: 200 OK', function () { pm.response.to.have.status(200); });",
+              "pm.test('content-type is image/png', function () {",
+              "  pm.expect(pm.response.headers.get('content-type')).to.include('image/png');",
+              "});",
+              "console.log('Volume chart PNG size:', pm.response.stream.length, 'bytes.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=bar&y_axis=volume&series_event_type=stock_ohlc&title=Trading%20Volume",
+          "host": ["{{baseUrl}}"],
+          "path": ["charts"],
+          "query": [
+            { "key": "dataset_id", "value": "{{datasetId}}" },
+            { "key": "type", "value": "bar" },
+            { "key": "y_axis", "value": "volume" },
+            { "key": "series_event_type", "value": "stock_ohlc" },
+            { "key": "title", "value": "Trading Volume" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5) Render Filtered Chart — AAPL Only, First 2 Weeks",
+      "description": "Render a chart filtered to AAPL only during the first two weeks of February.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('render filtered chart: 200 OK', function () { pm.response.to.have.status(200); });",
+              "pm.test('content-type is image/png', function () {",
+              "  pm.expect(pm.response.headers.get('content-type')).to.include('image/png');",
+              "});",
+              "console.log('Filtered chart PNG size:', pm.response.stream.length, 'bytes.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=line&y_axis=close&series_event_type=stock_ohlc&companies=AAPL&start_date=2026-02-01&end_date=2026-02-14&title=AAPL%20Close%20(Feb%201-14)",
+          "host": ["{{baseUrl}}"],
+          "path": ["charts"],
+          "query": [
+            { "key": "dataset_id", "value": "{{datasetId}}" },
+            { "key": "type", "value": "line" },
+            { "key": "y_axis", "value": "close" },
+            { "key": "series_event_type", "value": "stock_ohlc" },
+            { "key": "companies", "value": "AAPL" },
+            { "key": "start_date", "value": "2026-02-01" },
+            { "key": "end_date", "value": "2026-02-14" },
+            { "key": "title", "value": "AAPL Close (Feb 1-14)" }
+          ]
+        }
+      }
+    }
+  ]
+}

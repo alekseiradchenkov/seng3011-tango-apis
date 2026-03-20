@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "a1b2c3d4-0001-4000-8000-demo-flow-0001",
-    "name": "Demo Flow 1 — Market Data Ingestion",
-    "description": "User Story: An analyst signs up, logs in, creates a dataset for tech stocks, ingests real OHLC market data from Yahoo Finance, then browses the results.\n\nSteps:\n  1. Sign up (tolerates 409 if account exists)\n  2. Log in → capture accessToken\n  3. Create dataset 'AAPL & MSFT – Feb 2026'\n  4. Fetch AAPL + MSFT events for February 2026\n  5. Retrieve the full dataset to verify ingestion\n  6. List all datasets for the authenticated user\n\nRun with Newman:\n  npx newman run postman/demo-flow-1-data-ingestion.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "name": "Integration Test 2 — Market Data Ingestion",
+    "description": "User Story: An analyst signs up, logs in, creates a dataset for tech stocks, ingests real OHLC market data from Yahoo Finance, then browses the results.\n\nSteps:\n  1. Sign up (tolerates 409 if account exists)\n  2. Log in → capture accessToken\n  3. Create dataset 'AAPL & MSFT – Feb 2026'\n  4. Fetch AAPL + MSFT events for February 2026\n  5. Retrieve the full dataset to verify ingestion\n  6. List all datasets for the authenticated user\n\nRun with Newman:\n  npx newman run integration-tests/integration-test-2.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -38,7 +38,7 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": "{{baseUrl}}/v1/auth/signup"
+        "url": "{{baseUrl}}/auth/signup"
       }
     },
     {
@@ -68,7 +68,7 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": "{{baseUrl}}/v1/auth/login"
+        "url": "{{baseUrl}}/auth/login"
       }
     },
     {
@@ -104,7 +104,7 @@
           "mode": "raw",
           "raw": "{\n  \"name\": \"AAPL & MSFT — Feb 2026\",\n  \"description\": \"Daily OHLC data for Apple and Microsoft during February 2026\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets"
+        "url": "{{baseUrl}}/datasets"
       }
     },
     {
@@ -120,14 +120,19 @@
               "var json = pm.response.json();",
               "pm.test('events were ingested', function () {",
               "  pm.expect(json.count).to.be.a('number').and.above(0);",
+              "  pm.expect(json.raw_event_count).to.be.a('number').and.above(0);",
+              "  pm.expect(json.derived_event_count).to.be.a('number').and.at.least(0);",
+              "  pm.expect(json.event_type_counts).to.be.an('object');",
+              "  pm.expect(json.event_type_counts.stock_ohlc).to.equal(json.raw_event_count);",
+              "  pm.expect(json.count).to.equal(json.raw_event_count + json.derived_event_count);",
               "});",
-              "console.log('Ingested', json.count, 'events into dataset', pm.collectionVariables.get('datasetId'));"
+              "console.log('Ingested raw=', json.raw_event_count, 'derived=', json.derived_event_count, 'total=', json.count);"
             ]
           }
         }
       ],
       "request": {
-        "method": "POST",
+        "method": "PUT",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
           { "key": "Authorization", "value": "Bearer {{accessToken}}" }
@@ -136,12 +141,12 @@
           "mode": "raw",
           "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2026-02-01\",\n  \"date_to\": \"2026-02-28\"\n}"
         },
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}/events/fetch"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
       }
     },
     {
-      "name": "5) Get Dataset — Verify Ingestion",
-      "description": "Retrieve the full dataset from the collection service to confirm events were stored in DynamoDB and S3.",
+      "name": "5) Get Dataset Metadata",
+      "description": "Retrieve the dataset metadata (events are fetched separately via /datasets/{id}/events).",
       "event": [
         {
           "listen": "test",
@@ -150,20 +155,12 @@
             "exec": [
               "pm.test('get dataset: 200 OK', function () { pm.response.to.have.status(200); });",
               "var json = pm.response.json();",
-              "pm.test('events array is present', function () {",
-              "  pm.expect(json.events).to.be.an('array').and.not.empty;",
+              "pm.test('dataset has metadata fields', function () {",
+              "  pm.expect(json).to.have.property('dataset_id');",
+              "  pm.expect(json).to.have.property('name');",
+              "  pm.expect(json).to.have.property('data_source');",
               "});",
-              "pm.test('first event has ADAGE structure', function () {",
-              "  var e = json.events[0];",
-              "  pm.expect(e).to.have.property('time_object');",
-              "  pm.expect(e).to.have.property('event_type');",
-              "  pm.expect(e).to.have.property('attribute');",
-              "});",
-              "pm.test('first event symbol includes exchange', function () {",
-              "  var symbol = json.events[0].attribute.symbol;",
-              "  pm.expect(symbol).to.include('.XNAS');",
-              "});",
-              "console.log('Dataset has', json.events.length, 'events. Sample symbol:', json.events[0].attribute.symbol);"
+              "console.log('Dataset metadata:', json.dataset_id, '-', json.name);"
             ]
           }
         }
@@ -171,7 +168,38 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets/{{datasetId}}"
+        "url": "{{baseUrl}}/datasets/{{datasetId}}"
+      }
+    },
+    {
+      "name": "5b) Get Dataset Events",
+      "description": "Retrieve events from the dataset to verify ingestion.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('get events: 200 OK', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('events array is present', function () {",
+              "  pm.expect(json.dataset.events).to.be.an('array').and.not.empty;",
+              "});",
+              "pm.test('first event has ADAGE structure', function () {",
+              "  var e = json.dataset.events[0];",
+              "  pm.expect(e).to.have.property('time_object');",
+              "  pm.expect(e).to.have.property('event_type');",
+              "  pm.expect(e).to.have.property('attribute');",
+              "});",
+              "console.log('Dataset has', json.dataset.events.length, 'events.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
       }
     },
     {
@@ -199,7 +227,7 @@
       "request": {
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": "{{baseUrl}}/v1/datasets"
+        "url": "{{baseUrl}}/datasets"
       }
     }
   ]

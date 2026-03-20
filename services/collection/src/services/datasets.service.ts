@@ -97,6 +97,144 @@ function toAdageData(meta: DatasetMetadata, events: AdageEvent[]): AdageData {
   };
 }
 
+function parseEventTimeMs(event: AdageEvent): number {
+  const raw = event.time_object?.timestamp ?? "";
+  const iso = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
+function stddev(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function movingAverage(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+type DerivationSummary = {
+  derivedEvents: AdageEvent[];
+  eventTypeCounts: Record<string, number>;
+};
+
+function deriveEvents(rawEvents: AdageEvent[]): DerivationSummary {
+  const derivedEvents: AdageEvent[] = [];
+  const eventTypeCounts: Record<string, number> = {};
+
+  const bySymbol = new Map<string, AdageEvent[]>();
+  for (const event of rawEvents) {
+    const symbol = String(event.attribute?.symbol ?? "");
+    if (!symbol) continue;
+    const arr = bySymbol.get(symbol) ?? [];
+    arr.push(event);
+    bySymbol.set(symbol, arr);
+  }
+
+  for (const [symbol, events] of bySymbol.entries()) {
+    events.sort((a, b) => parseEventTimeMs(a) - parseEventTimeMs(b));
+    const closes = events.map((e) => asNumber(e.attribute?.close));
+
+    for (let i = 1; i < events.length; i += 1) {
+      const prev = closes[i - 1];
+      const curr = closes[i];
+      if (prev === null || curr === null || prev === 0) continue;
+      const pct = ((curr - prev) / prev) * 100;
+      if (pct >= 5 || pct <= -5) {
+        const eventType = pct >= 5 ? "price_jump" : "price_drop";
+        derivedEvents.push({
+          time_object: events[i].time_object,
+          event_type: eventType,
+          attribute: {
+            symbol,
+            pct_change_1d: Number(pct.toFixed(4)),
+            close_today: curr,
+            close_prev: prev,
+            threshold: 5,
+            rule_engine_version: "1.0.0",
+          },
+        });
+        eventTypeCounts[eventType] = (eventTypeCounts[eventType] ?? 0) + 1;
+      }
+    }
+
+    // Volatility spike: stdev(10) > stdev(30) * 1.5
+    for (let i = 29; i < events.length; i += 1) {
+      const window30 = closes.slice(i - 29, i + 1).filter((v): v is number => v !== null);
+      const window10 = closes.slice(i - 9, i + 1).filter((v): v is number => v !== null);
+      if (window30.length < 30 || window10.length < 10) continue;
+      const stdev30 = stddev(window30);
+      const stdev10 = stddev(window10);
+      const factor = stdev30 === 0 ? 0 : stdev10 / stdev30;
+      if (factor > 1.5) {
+        derivedEvents.push({
+          time_object: events[i].time_object,
+          event_type: "volatility_spike",
+          attribute: {
+            symbol,
+            stdev_10: Number(stdev10.toFixed(6)),
+            stdev_30: Number(stdev30.toFixed(6)),
+            spike_factor: Number(factor.toFixed(6)),
+            threshold_factor: 1.5,
+            rule_engine_version: "1.0.0",
+          },
+        });
+        eventTypeCounts.volatility_spike = (eventTypeCounts.volatility_spike ?? 0) + 1;
+      }
+    }
+
+    // Trend crossover: MA20 crossing MA50
+    for (let i = 50; i < events.length; i += 1) {
+      const shortNowSlice = closes.slice(i - 19, i + 1).filter((v): v is number => v !== null);
+      const longNowSlice = closes.slice(i - 49, i + 1).filter((v): v is number => v !== null);
+      const shortPrevSlice = closes.slice(i - 20, i).filter((v): v is number => v !== null);
+      const longPrevSlice = closes.slice(i - 50, i).filter((v): v is number => v !== null);
+      if (
+        shortNowSlice.length < 20 ||
+        longNowSlice.length < 50 ||
+        shortPrevSlice.length < 20 ||
+        longPrevSlice.length < 50
+      ) {
+        continue;
+      }
+      const shortNow = movingAverage(shortNowSlice);
+      const longNow = movingAverage(longNowSlice);
+      const shortPrev = movingAverage(shortPrevSlice);
+      const longPrev = movingAverage(longPrevSlice);
+      const prevDelta = shortPrev - longPrev;
+      const nowDelta = shortNow - longNow;
+      const crossedUp = prevDelta <= 0 && nowDelta > 0;
+      const crossedDown = prevDelta >= 0 && nowDelta < 0;
+      if (crossedUp || crossedDown) {
+        derivedEvents.push({
+          time_object: events[i].time_object,
+          event_type: "trend_crossover",
+          attribute: {
+            symbol,
+            short_window: 20,
+            long_window: 50,
+            ma_short: Number(shortNow.toFixed(6)),
+            ma_long: Number(longNow.toFixed(6)),
+            direction: crossedUp ? "bullish" : "bearish",
+            rule_engine_version: "1.0.0",
+          },
+        });
+        eventTypeCounts.trend_crossover = (eventTypeCounts.trend_crossover ?? 0) + 1;
+      }
+    }
+  }
+
+  return { derivedEvents, eventTypeCounts };
+}
+
 export async function getDatasets(userId: string): Promise<AdageData[]> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const ddb = getDdbDocClient();
@@ -238,7 +376,13 @@ export async function fetchEvents(
   userId: string,
   datasetId: string,
   query: FetchEventsInput,
-): Promise<{ count: number; dataset: AdageData } | null> {
+): Promise<{
+  count: number;
+  raw_event_count: number;
+  derived_event_count: number;
+  event_type_counts: Record<string, number>;
+  dataset: AdageData;
+} | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
   const ddb = getDdbDocClient();
@@ -261,6 +405,8 @@ export async function fetchEvents(
     date_from: query.date_from,
     date_to: query.date_to,
   });
+  const { derivedEvents, eventTypeCounts } = deriveEvents(events);
+  const allEvents = [...events, ...derivedEvents].sort((a, b) => parseEventTimeMs(a) - parseEventTimeMs(b));
 
   const newFilters: DatasetFilters = {
     symbols: query.symbols,
@@ -283,12 +429,20 @@ export async function fetchEvents(
     }),
   );
 
-  const full = toAdageData(meta, events);
+  const full = toAdageData(meta, allEvents);
   await s3WriteJson(eventsBucket, datasetS3Key(userId, datasetId), full);
 
+  const fullEventTypeCounts: Record<string, number> = {
+    stock_ohlc: events.length,
+    ...eventTypeCounts,
+  };
+
   return {
-    count: events.length,
-    dataset: toAdageData(meta, events.slice(0, 100)),
+    count: allEvents.length,
+    raw_event_count: events.length,
+    derived_event_count: derivedEvents.length,
+    event_type_counts: fullEventTypeCounts,
+    dataset: toAdageData(meta, allEvents.slice(0, 100)),
   };
 }
 

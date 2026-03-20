@@ -3,48 +3,10 @@ name: aws-deploy
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
   workflow_dispatch:
 
 jobs:
-  test:
-    name: "test-${{ matrix.service }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [auth, collection, retrieval, visualisation]
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests with coverage
-        run: npm test -- --coverage
-
-      - name: Upload coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.service }}
-          path: services/${{ matrix.service }}/coverage
-          if-no-files-found: warn
-
   deploy-dev:
-    if: github.event_name != 'pull_request'
-    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: dev

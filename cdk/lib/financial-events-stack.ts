@@ -190,6 +190,13 @@ export class FinancialEventsStack extends Stack {
     const authIntegration = new apigwIntegrations.HttpLambdaIntegration("AuthIntegration", authFunction);
     const docsIntegration = new apigwIntegrations.HttpLambdaIntegration("DocsIntegration", docsFunction);
 
+    // Base URL — redirect to Swagger UI (handled in docs-handler)
+    httpApi.addRoutes({
+      path: "/",
+      methods: [apigw.HttpMethod.GET],
+      integration: docsIntegration,
+    });
+
     // Docs & Status routes (public)
     httpApi.addRoutes({
       path: "/docs",

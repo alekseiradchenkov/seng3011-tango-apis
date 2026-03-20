@@ -1,7 +1,5 @@
 import { Request, Response, Router, NextFunction } from "express";
 import {
-  getDatasets,
-  getDataset,
   createDataset,
   updateDataset,
   deleteDataset,
@@ -31,13 +29,6 @@ function asyncHandler<T extends Request>(
 /* Get and verify userId (see ../../../../shared/auth/user.auth) */
 router.use(checkAuth);
 
-router.get(
-  "/datasets",
-  asyncHandler<AuthRequest>(async (req, res) => {
-    res.status(200).json(await getDatasets(req.userId));
-  }),
-);
-
 router.post(
   "/datasets",
   asyncHandler<AuthRequest>(async (req, res) => {
@@ -51,17 +42,6 @@ router.post(
         description: typeof description === "string" ? description : undefined,
       }),
     );
-  }),
-);
-
-router.get(
-  "/datasets/:datasetId",
-  asyncHandler<AuthRequest>(async (req, res) => {
-    const resolved = await getDataset(req.userId, req.params.datasetId as string);
-
-    if (!assertDatasetExists(res, resolved)) return;
-
-    res.status(200).json(resolved);
   }),
 );
 
@@ -91,8 +71,8 @@ router.delete(
   }),
 );
 
-router.post(
-  "/datasets/:datasetId/events/fetch",
+router.put(
+  "/datasets/:datasetId/events",
   asyncHandler<AuthRequest>(async (req, res) => {
     const { symbols, exchange, date_from, date_to } = req.body;
 
@@ -131,7 +111,7 @@ router.post(
 );
 
 router.delete(
-  "/datasets/:datasetId/events/remove",
+  "/datasets/:datasetId/events",
   asyncHandler<AuthRequest>(async (req, res) => {
     const { symbols, date_from, date_to } = req.body;
 

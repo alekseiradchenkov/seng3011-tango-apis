@@ -184,7 +184,6 @@ export async function getDatasets(userId: string): Promise<Record<string, unknow
     data_source: i.data_source,
     dataset_type: i.dataset_type,
     time_object: i.time_object,
-    events: [],
   }));
 }
 
@@ -193,7 +192,6 @@ export async function getDataset(
   datasetId: string,
 ): Promise<Record<string, unknown> | null> {
   const table = requireEnv("EVENT_INDEX_TABLE");
-  const eventsBucket = requireEnv("EVENTS_BUCKET");
   const ddb = getDdbDocClient();
 
   const metaOut = await ddb.send(
@@ -205,7 +203,6 @@ export async function getDataset(
   if (!metaOut.Item) return null;
 
   const meta = metaOut.Item as Record<string, unknown>;
-  const full = await s3ReadJson<AdageData>(eventsBucket, datasetS3Key(userId, datasetId));
   return {
     dataset_id: meta.dataset_id,
     name: meta.name,
@@ -213,7 +210,6 @@ export async function getDataset(
     data_source: meta.data_source,
     dataset_type: meta.dataset_type,
     time_object: meta.time_object,
-    events: (full?.events ?? []).slice(0, 100),
   };
 }
 

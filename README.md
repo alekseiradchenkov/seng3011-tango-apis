@@ -104,4 +104,4 @@ docker run --rm -p 3004:3000 --env-file .env -e PORT=3000 tango-visualisation
 
 - Routes are unversioned (for example: `/datasets`, `/charts`, `/docs`, `/status`).
 - `PUT /datasets/{id}/events` stores raw OHLC and deterministic derived events together.
-- `GET /charts` defaults to plotting underlying `stock_ohlc` data.
+- `GET /charts` returns a candlestick PNG from `stock_ohlc` events.

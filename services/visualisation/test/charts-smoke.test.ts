@@ -8,19 +8,6 @@ jest.mock("../../../shared/auth/user.auth", () => ({
   },
 }));
 
-jest.mock("chartjs-node-canvas", () => {
-  const ChartJSNodeCanvas = jest.fn().mockImplementation(() => {
-    if ((globalThis as any).__VIZ_CHARTJS_THROW) {
-      throw new Error("chartjs constructor failed (mock)");
-    }
-
-    return {
-      renderToBuffer: async () => Buffer.from("ok"),
-    };
-  });
-  return { ChartJSNodeCanvas };
-});
-
 function s3DatasetResponse(dataset_id: string) {
   // `datasets/${userId}/${dataset_id}.json` → we want dataset_id only.
   switch (dataset_id) {
@@ -30,76 +17,56 @@ function s3DatasetResponse(dataset_id: string) {
           {
             time_object: { timestamp: "2024-01-02 00:00:00.000" },
             event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 186.7, volume: 1000 },
+            attribute: { symbol: "AAPL.XNAS", open: 180, high: 188, low: 179, close: 186.7, volume: 1000 },
           },
           {
             time_object: { timestamp: "2024-01-03 00:00:00.000" },
             event_type: "other",
-            attribute: { symbol: "MSFT.XNAS", close: 200.1, volume: 900 },
+            attribute: { symbol: "MSFT.XNAS", open: 195, high: 205, low: 190, close: 200.1, volume: 900 },
           },
         ],
       };
     case "ds_missing":
       // handled by mock below (throw)
       return null;
-    case "ds_fallback_bar":
-      return {
-        events: [
-          {
-            time_object: { timestamp: "2024-01-01 00:00:00.000" },
-            event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 10, volume: 100 },
-          },
-          {
-            time_object: { timestamp: "2024-01-02 00:00:00.000" },
-            event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 20, volume: 110 },
-          },
-          {
-            time_object: { timestamp: "2024-01-03 00:00:00.000" },
-            event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 15, volume: 120 },
-          },
-        ],
-      };
     case "ds_filtered":
       return {
         events: [
           {
             time_object: { timestamp: "2024-01-10 00:00:00.000" },
             event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 11, volume: 111 },
+            attribute: { symbol: "AAPL.XNAS", open: 10, high: 12, low: 9, close: 11, volume: 111 },
           },
           {
             time_object: { timestamp: "2024-01-20 00:00:00.000" },
             event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 15, volume: 115 },
+            attribute: { symbol: "AAPL.XNAS", open: 14, high: 16, low: 13, close: 15, volume: 115 },
           },
           {
             time_object: { timestamp: "2024-01-25 00:00:00.000" },
             event_type: "stock_ohlc",
-            attribute: { symbol: "MSFT.XNAS", close: 99, volume: 999 },
+            attribute: { symbol: "MSFT.XNAS", open: 98, high: 100, low: 95, close: 99, volume: 999 },
           },
           {
             time_object: { timestamp: "2024-01-30 00:00:00.000" },
             event_type: "other",
-            attribute: { symbol: "AAPL.XNAS", close: 33, volume: 333 },
+            attribute: { symbol: "AAPL.XNAS", open: 32, high: 34, low: 30, close: 33, volume: 333 },
           },
           {
             time_object: { timestamp: "2024-02-01 00:00:00.000" },
             event_type: "stock_ohlc",
-            attribute: { symbol: "AAPL.XNAS", close: 40, volume: 400 },
+            attribute: { symbol: "AAPL.XNAS", open: 39, high: 41, low: 38, close: 40, volume: 400 },
           },
         ],
       };
-    case "ds_novalues":
+    case "ds_noohlc":
       return {
         events: [
           {
             time_object: { timestamp: "2024-01-02 00:00:00.000" },
             event_type: "stock_ohlc",
-            // close is a string → dataPoints value becomes null
-            attribute: { symbol: "AAPL.XNAS", close: "bad", volume: 1000 },
+            // close is a string -> invalid OHLC point for candlestick renderer.
+            attribute: { symbol: "AAPL.XNAS", open: 10, high: 12, low: 9, close: "bad", volume: 1000 },
           },
         ],
       };
@@ -127,8 +94,6 @@ jest.mock("@aws-sdk/client-s3", () => {
         const key = (cmd?.input?.Key as string | undefined) ?? (cmd?.Key as string | undefined);
         const last = key ? key.split("/").pop() : undefined;
         const dataset_id = last ? last.replace(/\.json$/, "") : undefined;
-        // eslint-disable-next-line no-console
-        console.log("[viz test] S3 GetObject Key=", key, "→ dataset_id=", dataset_id);
         const resp = dataset_id ? s3DatasetResponse(dataset_id) : null;
         if (!resp) {
           const err: any = new Error("NoSuchKey");
@@ -180,20 +145,7 @@ describe("visualisation charts smoke", () => {
     expect(res.status).toBe(404);
   });
 
-  it("renders bar fallback when chartjs rendering throws", async () => {
-    const router = (await import("../src/routes/v1")).default;
-    const app = express();
-    app.use("/", router);
-    (globalThis as any).__VIZ_CHARTJS_THROW = true;
-    const res = await request(app).get(
-      "/charts?dataset_id=ds_fallback_bar&type=bar&title=fail",
-    );
-    (globalThis as any).__VIZ_CHARTJS_THROW = false;
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("image/png");
-  });
-
-  it("applies series_event_type, start/end, companies, and x_axis=symbol filters", async () => {
+  it("applies start/end, companies, and x_axis=symbol filters", async () => {
     const router = (await import("../src/routes/v1")).default;
     const app = express();
     app.use("/", router);
@@ -204,17 +156,14 @@ describe("visualisation charts smoke", () => {
     expect(res.headers["content-type"]).toContain("image/png");
   });
 
-  it("fallback early-returns when y_axis produces no numeric values", async () => {
+  it("returns 400 when no valid OHLC points exist", async () => {
     const router = (await import("../src/routes/v1")).default;
     const app = express();
     app.use("/", router);
-    (globalThis as any).__VIZ_CHARTJS_THROW = true;
     const res = await request(app).get(
-      "/charts?dataset_id=ds_novalues&y_axis=close&title=fail",
+      "/charts?dataset_id=ds_noohlc",
     );
-    (globalThis as any).__VIZ_CHARTJS_THROW = false;
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("image/png");
+    expect(res.status).toBe(400);
   });
 
   it("returns 500 when an event is malformed (labels throw)", async () => {

@@ -66,7 +66,7 @@ jest.mock("@aws-sdk/client-s3", () => {
                     {
                       time_object: { timestamp: "2024-01-02 00:00:00.000" },
                       event_type: "stock_ohlc",
-                      attribute: { symbol: "AAPL.XNAS", close: 10, volume: 100 },
+                      attribute: { symbol: "AAPL.XNAS", open: 9, high: 12, low: 8, close: 10, volume: 100 },
                     },
                   ],
                 }),

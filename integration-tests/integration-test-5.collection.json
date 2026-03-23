@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-0004-4000-8000-demo-flow-0004",
     "name": "Integration Test 5 — Chart Visualisation",
-    "description": "User Story: An analyst ingests market data then renders charts directly from the dataset events using the stateless Visualisation API.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest AAPL + NVDA events for Feb 2026\n  3. Render a line chart of AAPL close prices\n  4. Render a bar chart of NVDA volume\n  5. Render a filtered chart (specific date range)\n\nRun with Newman:\n  npx newman run integration-tests/integration-test-5.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
+    "description": "User Story: An analyst ingests market data then renders candlestick charts from dataset OHLC events using the stateless Visualisation API.\n\nSteps:\n  1. Log in → capture accessToken\n  2. Create dataset & ingest AAPL + NVDA events for Feb 2026\n  3. Render a candlestick chart for all symbols\n  4. Render a filtered candlestick chart for AAPL only in the first half of the month\n\nRun with Newman:\n  npx newman run integration-tests/integration-test-5.collection.json \\\n    --env-var apiId=<YOUR_API_ID>",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -112,8 +112,8 @@
       }
     },
     {
-      "name": "3) Render Line Chart — Close Prices",
-      "description": "Render a line chart showing close prices for all events in the dataset. Returns a PNG image.",
+      "name": "3) Render Candlestick Chart — Full Dataset",
+      "description": "Render a candlestick chart for all available OHLC events in the dataset. Returns a PNG image.",
       "event": [
         {
           "listen": "test",
@@ -136,22 +136,19 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
         "url": {
-          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=line&y_axis=close&series_event_type=stock_ohlc&title=Close%20Prices",
+          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&title=Candlestick%20(Full)",
           "host": ["{{baseUrl}}"],
           "path": ["charts"],
           "query": [
             { "key": "dataset_id", "value": "{{datasetId}}" },
-            { "key": "type", "value": "line" },
-            { "key": "y_axis", "value": "close" },
-            { "key": "series_event_type", "value": "stock_ohlc" },
-            { "key": "title", "value": "Close Prices" }
+            { "key": "title", "value": "Candlestick (Full)" }
           ]
         }
       }
     },
     {
-      "name": "4) Render Bar Chart — Volume",
-      "description": "Render a bar chart showing trading volume for all events in the dataset.",
+      "name": "4) Render Filtered Candlestick — AAPL Only, First 2 Weeks",
+      "description": "Render a candlestick chart filtered to AAPL during the first two weeks of February.",
       "event": [
         {
           "listen": "test",
@@ -162,7 +159,7 @@
               "pm.test('content-type is image/png', function () {",
               "  pm.expect(pm.response.headers.get('content-type')).to.include('image/png');",
               "});",
-              "console.log('Volume chart PNG size:', pm.response.stream.length, 'bytes.');"
+              "console.log('Filtered candlestick PNG size:', pm.response.stream.length, 'bytes.');"
             ]
           }
         }
@@ -171,53 +168,15 @@
         "method": "GET",
         "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
         "url": {
-          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=bar&y_axis=volume&series_event_type=stock_ohlc&title=Trading%20Volume",
+          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&companies=AAPL&start_date=2026-02-01&end_date=2026-02-14&title=AAPL%20Candlestick%20(Feb%201-14)",
           "host": ["{{baseUrl}}"],
           "path": ["charts"],
           "query": [
             { "key": "dataset_id", "value": "{{datasetId}}" },
-            { "key": "type", "value": "bar" },
-            { "key": "y_axis", "value": "volume" },
-            { "key": "series_event_type", "value": "stock_ohlc" },
-            { "key": "title", "value": "Trading Volume" }
-          ]
-        }
-      }
-    },
-    {
-      "name": "5) Render Filtered Chart — AAPL Only, First 2 Weeks",
-      "description": "Render a chart filtered to AAPL only during the first two weeks of February.",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('render filtered chart: 200 OK', function () { pm.response.to.have.status(200); });",
-              "pm.test('content-type is image/png', function () {",
-              "  pm.expect(pm.response.headers.get('content-type')).to.include('image/png');",
-              "});",
-              "console.log('Filtered chart PNG size:', pm.response.stream.length, 'bytes.');"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
-        "url": {
-          "raw": "{{baseUrl}}/charts?dataset_id={{datasetId}}&type=line&y_axis=close&series_event_type=stock_ohlc&companies=AAPL&start_date=2026-02-01&end_date=2026-02-14&title=AAPL%20Close%20(Feb%201-14)",
-          "host": ["{{baseUrl}}"],
-          "path": ["charts"],
-          "query": [
-            { "key": "dataset_id", "value": "{{datasetId}}" },
-            { "key": "type", "value": "line" },
-            { "key": "y_axis", "value": "close" },
-            { "key": "series_event_type", "value": "stock_ohlc" },
             { "key": "companies", "value": "AAPL" },
             { "key": "start_date", "value": "2026-02-01" },
             { "key": "end_date", "value": "2026-02-14" },
-            { "key": "title", "value": "AAPL Close (Feb 1-14)" }
+            { "key": "title", "value": "AAPL Candlestick (Feb 1-14)" }
           ]
         }
       }

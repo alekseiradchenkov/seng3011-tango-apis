@@ -57,188 +57,153 @@ function datasetS3Key(userId: string, datasetId: string) {
 const CHART_WIDTH = 960;
 const CHART_HEIGHT = 540;
 
-type ChartType = "line" | "bar";
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
 
-async function tryRenderWithChartJs(
+function dateLabelFromTimestamp(ts: string): string {
+  // Expected format: "YYYY-MM-DD HH:mm:ss.sss" (from stored Yahoo EOD mapping).
+  // We only show the date part to avoid overly long labels.
+  return ts.split(" ")[0] ?? ts;
+}
+
+type Candle = {
+  label: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+};
+
+async function renderChartWithCanvas(
   labels: string[],
-  dataPoints: Array<number | null>,
-  type: ChartType,
-  yAxis: string,
+  xAxisTitle: string,
+  yAxisTitle: string,
   title: string,
-  companyList: string[] | null,
+  seriesLabels: string[] | null,
+  candles: Candle[],
 ): Promise<Buffer | null> {
   try {
-    // Lazy-load native canvas stack so Lambda can still start in environments
-    // where native bindings are unavailable (e.g., some LocalStack setups).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ChartJSNodeCanvas } = require("chartjs-node-canvas") as {
-      ChartJSNodeCanvas: new (opts: {
-        width: number;
-        height: number;
-        backgroundColour: string;
-      }) => { renderToBuffer: (config: unknown) => Promise<Buffer> };
+    const image = new PNG({ width: CHART_WIDTH, height: CHART_HEIGHT });
+    const setPx = (x: number, y: number, r: number, g: number, b: number, a = 255) => {
+      if (x < 0 || y < 0 || x >= CHART_WIDTH || y >= CHART_HEIGHT) return;
+      const idx = (Math.floor(y) * CHART_WIDTH + Math.floor(x)) * 4;
+      image.data[idx] = r;
+      image.data[idx + 1] = g;
+      image.data[idx + 2] = b;
+      image.data[idx + 3] = a;
+    };
+    const drawLine = (x0: number, y0: number, x1: number, y1: number, rgb: [number, number, number]) => {
+      let x = Math.round(x0), y = Math.round(y0);
+      const tx = Math.round(x1), ty = Math.round(y1);
+      const dx = Math.abs(tx - x), sx = x < tx ? 1 : -1;
+      const dy = -Math.abs(ty - y), sy = y < ty ? 1 : -1;
+      let err = dx + dy;
+      while (true) {
+        setPx(x, y, rgb[0], rgb[1], rgb[2]);
+        if (x === tx && y === ty) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+      }
+    };
+    const fillRect = (x: number, y: number, w: number, h: number, rgb: [number, number, number]) => {
+      const x0 = Math.max(0, Math.floor(x));
+      const y0 = Math.max(0, Math.floor(y));
+      const x1 = Math.min(CHART_WIDTH, Math.ceil(x + w));
+      const y1 = Math.min(CHART_HEIGHT, Math.ceil(y + h));
+      for (let yy = y0; yy < y1; yy += 1) for (let xx = x0; xx < x1; xx += 1) setPx(xx, yy, rgb[0], rgb[1], rgb[2]);
+    };
+    fillRect(0, 0, CHART_WIDTH, CHART_HEIGHT, [255, 255, 255]);
+    const glyphs: Record<string, string[]> = {
+      A: ["01110","10001","10001","11111","10001","10001","10001"], B: ["11110","10001","11110","10001","10001","10001","11110"],
+      C: ["01111","10000","10000","10000","10000","10000","01111"], D: ["11110","10001","10001","10001","10001","10001","11110"],
+      E: ["11111","10000","11110","10000","10000","10000","11111"], F: ["11111","10000","11110","10000","10000","10000","10000"],
+      G: ["01111","10000","10000","10111","10001","10001","01110"], H: ["10001","10001","11111","10001","10001","10001","10001"],
+      I: ["11111","00100","00100","00100","00100","00100","11111"], L: ["10000","10000","10000","10000","10000","10000","11111"],
+      M: ["10001","11011","10101","10001","10001","10001","10001"], N: ["10001","11001","10101","10011","10001","10001","10001"],
+      O: ["01110","10001","10001","10001","10001","10001","01110"], P: ["11110","10001","10001","11110","10000","10000","10000"],
+      R: ["11110","10001","10001","11110","10100","10010","10001"], S: ["01111","10000","10000","01110","00001","00001","11110"],
+      T: ["11111","00100","00100","00100","00100","00100","00100"], U: ["10001","10001","10001","10001","10001","10001","01110"],
+      V: ["10001","10001","10001","10001","10001","01010","00100"], X: ["10001","01010","00100","00100","01010","10001","10001"],
+      Y: ["10001","01010","00100","00100","00100","00100","00100"], "0": ["01110","10011","10101","11001","10001","10001","01110"],
+      "1": ["00100","01100","00100","00100","00100","00100","01110"], "2": ["01110","10001","00001","00010","00100","01000","11111"],
+      "3": ["11110","00001","00001","01110","00001","00001","11110"], "4": ["00010","00110","01010","10010","11111","00010","00010"],
+      "5": ["11111","10000","10000","11110","00001","00001","11110"], "6": ["01110","10000","10000","11110","10001","10001","01110"],
+      "7": ["11111","00001","00010","00100","01000","01000","01000"], "8": ["01110","10001","10001","01110","10001","10001","01110"],
+      "9": ["01110","10001","10001","01111","00001","00001","01110"], "-": ["00000","00000","00000","11111","00000","00000","00000"],
+      "(": ["00010","00100","01000","01000","01000","00100","00010"], ")": ["01000","00100","00010","00010","00010","00100","01000"],
+      " ": ["00000","00000","00000","00000","00000","00000","00000"],
+    };
+    const drawText = (text: string, x: number, y: number, scale = 2, rgb: [number, number, number] = [31, 41, 55]) => {
+      let cx = Math.floor(x);
+      const up = text.toUpperCase();
+      for (const ch of up) {
+        const g = glyphs[ch] ?? glyphs[" "];
+        for (let gy = 0; gy < g.length; gy += 1) for (let gx = 0; gx < g[gy].length; gx += 1) {
+          if (g[gy][gx] === "1") fillRect(cx + gx * scale, y + gy * scale, scale, scale, rgb);
+        }
+        cx += 6 * scale;
+      }
     };
 
-    const renderer = new ChartJSNodeCanvas({
-      width: CHART_WIDTH,
-      height: CHART_HEIGHT,
-      backgroundColour: "white",
-    });
+    const left = 90, right = CHART_WIDTH - 40, top = 60, bottom = CHART_HEIGHT - 90;
+    const w = right - left, h = bottom - top;
+    drawLine(left, top, left, bottom, [51, 65, 85]);
+    drawLine(left, bottom, right, bottom, [51, 65, 85]);
 
-    const chartConfig = {
-      type,
-      data: {
-        labels,
-        datasets: [
-          {
-            label: `${yAxis}${companyList ? ` (${companyList.join(", ")})` : ""}`,
-            data: dataPoints,
-            borderColor: "#2563eb",
-            backgroundColor: type === "bar" ? "#2563eb" : "#2563eb33",
-            tension: 0.3,
-            fill: type === "line",
-          },
-        ],
-      },
-      options: {
-        responsive: false,
-        plugins: {
-          title: {
-            display: true,
-            text: title,
-            font: { size: 18 },
-          },
-          legend: {
-            display: true,
-            position: "top" as const,
-          },
-        },
-        scales: {
-          x: { title: { display: true, text: "Date" } },
-          y: { title: { display: true, text: yAxis } },
-        },
-      },
-    };
+    const lows = candles.map((c) => c.low).filter((v): v is number => typeof v === "number");
+    const highs = candles.map((c) => c.high).filter((v): v is number => typeof v === "number");
+    const min = lows.length ? Math.min(...lows) : 0;
+    const max = highs.length ? Math.max(...highs) : 1;
+    const range = max - min || 1;
+    const toY = (v: number) => bottom - ((v - min) / range) * h;
+    const toX = (i: number) => left + (candles.length > 1 ? (i / (candles.length - 1)) * w : w / 2);
 
-    return renderer.renderToBuffer(chartConfig);
+    for (let i = 0; i <= 5; i += 1) {
+      const yy = top + (i / 5) * h;
+      drawLine(left, yy, right, yy, [226, 232, 240]);
+      const val = (max - ((i / 5) * range)).toFixed(2);
+      drawText(val, 10, yy - 8, 1, [51, 65, 85]);
+    }
+
+    const bodyW = Math.max(4, Math.floor((w / Math.max(candles.length, 1)) * 0.6));
+    for (let i = 0; i < candles.length; i += 1) {
+      const c = candles[i];
+      if (c.open === null || c.close === null || c.high === null || c.low === null) continue;
+      const x = toX(i);
+      const yH = toY(c.high), yL = toY(c.low), yO = toY(c.open), yC = toY(c.close);
+      const up = c.close >= c.open;
+      const col: [number, number, number] = up ? [22, 163, 74] : [220, 38, 38];
+      drawLine(x, yH, x, yL, col);
+      fillRect(x - bodyW / 2, Math.min(yO, yC), bodyW, Math.max(1, Math.abs(yC - yO)), col);
+    }
+
+    drawText(`${title}${seriesLabels ? ` (${seriesLabels.join(" ")})` : ""}`.slice(0, 70), 30, 18, 2, [15, 23, 42]);
+    drawText(xAxisTitle.slice(0, 30), Math.max(30, left + w / 2 - 60), CHART_HEIGHT - 40, 2, [51, 65, 85]);
+    drawText(yAxisTitle.slice(0, 20), 30, top - 22, 1, [51, 65, 85]);
+    const sample = Math.max(1, Math.floor(labels.length / 6));
+    for (let i = 0; i < labels.length; i += sample) {
+      const lx = toX(i);
+      drawText((labels[i] ?? "").slice(0, 10), lx - 24, bottom + 12, 1, [51, 65, 85]);
+    }
+
+    return PNG.sync.write(image);
   } catch {
     return null;
   }
-}
-
-function setPixel(
-  png: PNG,
-  x: number,
-  y: number,
-  r: number,
-  g: number,
-  b: number,
-  a = 255,
-) {
-  if (x < 0 || y < 0 || x >= png.width || y >= png.height) return;
-  const idx = (png.width * y + x) << 2;
-  png.data[idx] = r;
-  png.data[idx + 1] = g;
-  png.data[idx + 2] = b;
-  png.data[idx + 3] = a;
-}
-
-function drawLine(
-  png: PNG,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  color: [number, number, number],
-) {
-  const dx = Math.abs(x1 - x0);
-  const sx = x0 < x1 ? 1 : -1;
-  const dy = -Math.abs(y1 - y0);
-  const sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy;
-  let x = x0;
-  let y = y0;
-
-  while (true) {
-    setPixel(png, x, y, color[0], color[1], color[2]);
-    if (x === x1 && y === y1) break;
-    const e2 = 2 * err;
-    if (e2 >= dy) {
-      err += dy;
-      x += sx;
-    }
-    if (e2 <= dx) {
-      err += dx;
-      y += sy;
-    }
-  }
-}
-
-function renderFallbackPng(
-  dataPoints: Array<number | null>,
-  type: ChartType,
-): Buffer {
-  const png = new PNG({ width: CHART_WIDTH, height: CHART_HEIGHT });
-  const plotLeft = 80;
-  const plotRight = CHART_WIDTH - 40;
-  const plotTop = 40;
-  const plotBottom = CHART_HEIGHT - 60;
-  const plotWidth = plotRight - plotLeft;
-  const plotHeight = plotBottom - plotTop;
-
-  // white background
-  for (let y = 0; y < png.height; y += 1) {
-    for (let x = 0; x < png.width; x += 1) {
-      setPixel(png, x, y, 255, 255, 255, 255);
-    }
-  }
-
-  // axes
-  drawLine(png, plotLeft, plotTop, plotLeft, plotBottom, [55, 65, 81]);
-  drawLine(png, plotLeft, plotBottom, plotRight, plotBottom, [55, 65, 81]);
-
-  const values = dataPoints.filter((v): v is number => typeof v === "number");
-  if (values.length === 0) return PNG.sync.write(png);
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const stepX = plotWidth / Math.max(values.length - 1, 1);
-
-  if (type === "bar") {
-    const barWidth = Math.max(2, Math.floor(plotWidth / Math.max(values.length, 1) * 0.7));
-    values.forEach((v, i) => {
-      const xCenter = Math.floor(plotLeft + i * stepX);
-      const yVal = Math.floor(plotBottom - ((v - min) / range) * plotHeight);
-      for (let x = xCenter - Math.floor(barWidth / 2); x <= xCenter + Math.floor(barWidth / 2); x += 1) {
-        drawLine(png, x, plotBottom, x, yVal, [37, 99, 235]);
-      }
-    });
-  } else {
-    for (let i = 1; i < values.length; i += 1) {
-      const x0 = Math.floor(plotLeft + (i - 1) * stepX);
-      const y0 = Math.floor(plotBottom - ((values[i - 1] - min) / range) * plotHeight);
-      const x1 = Math.floor(plotLeft + i * stepX);
-      const y1 = Math.floor(plotBottom - ((values[i] - min) / range) * plotHeight);
-      drawLine(png, x0, y0, x1, y1, [37, 99, 235]);
-    }
-  }
-
-  return PNG.sync.write(png);
 }
 
 router.use(checkAuth);
 
 interface ChartQueryParams {
   dataset_id?: string;
-  type?: "line" | "bar";
   x_axis?: "timestamp" | "symbol";
-  y_axis?: string;
   companies?: string;
   start_date?: string;
   end_date?: string;
   title?: string;
-  series_event_type?: string;
 }
 
 router.get("/charts", async (req: Request, res: Response, next: NextFunction) => {
@@ -246,17 +211,7 @@ router.get("/charts", async (req: Request, res: Response, next: NextFunction) =>
     const userId = (req as unknown as { userId: string }).userId;
     const params = req.query as ChartQueryParams;
 
-    const {
-      dataset_id,
-      type = "line",
-      x_axis = "timestamp",
-      y_axis = "close",
-      title,
-      companies,
-      start_date,
-      end_date,
-      series_event_type = "stock_ohlc",
-    } = params;
+    const { dataset_id, x_axis = "timestamp", title, companies, start_date, end_date } = params;
 
     if (!dataset_id) {
       res.status(400).json({
@@ -278,7 +233,8 @@ router.get("/charts", async (req: Request, res: Response, next: NextFunction) =>
     }
 
     let events = data.events || [];
-    events = events.filter((e) => e.event_type === series_event_type);
+    // Candlestick renderer only supports OHLC events.
+    events = events.filter((e) => e.event_type === "stock_ohlc");
 
     if (start_date) {
       events = events.filter((e) => e.time_object.timestamp >= start_date);
@@ -305,22 +261,45 @@ router.get("/charts", async (req: Request, res: Response, next: NextFunction) =>
         ? String(e.attribute?.symbol ?? "")
         : e.time_object.timestamp.split(" ")[0],
     );
-    const dataPoints = events.map((e) => {
-      const value = e.attribute?.[y_axis];
-      return typeof value === "number" ? value : null;
-    });
+    const candles: Candle[] = events.map((e) => ({
+      label: x_axis === "symbol" ? String(e.attribute?.symbol ?? "") : dateLabelFromTimestamp(e.time_object.timestamp),
+      open: asNumber(e.attribute?.open),
+      high: asNumber(e.attribute?.high),
+      low: asNumber(e.attribute?.low),
+      close: asNumber(e.attribute?.close),
+    }));
 
-    const resolvedTitle = title || `${y_axis} over time`;
-    const resolvedType: ChartType = type === "bar" ? "bar" : "line";
-    const buffer =
-      (await tryRenderWithChartJs(
-        labels,
-        dataPoints,
-        resolvedType,
-        y_axis,
-        resolvedTitle,
-        companyList,
-      )) ?? renderFallbackPng(dataPoints, resolvedType);
+    const hasAnyCompleteOhlc = candles.some(
+      (c) => c.open !== null && c.high !== null && c.low !== null && c.close !== null,
+    );
+    if (!hasAnyCompleteOhlc) {
+      res.status(400).json({
+        error: "INVALID_PARAMETERS",
+        message: "No valid OHLC points found for candlestick rendering.",
+      });
+      return;
+    }
+
+    const resolvedTitle = title || "Candlestick";
+    const yAxisTitle = "Price";
+
+    const xAxisTitle = x_axis === "symbol" ? "Symbol" : "Date";
+
+    const buffer = await renderChartWithCanvas(
+      labels,
+      xAxisTitle,
+      yAxisTitle,
+      resolvedTitle,
+      companyList,
+      candles,
+    );
+    if (!buffer) {
+      res.status(500).json({
+        error: "INTERNAL",
+        message: "Unable to initialise canvas renderer in this environment.",
+      });
+      return;
+    }
 
     res.status(200).type("image/png").send(buffer);
   } catch (e) {

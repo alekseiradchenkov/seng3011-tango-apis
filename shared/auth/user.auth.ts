@@ -1,3 +1,19 @@
+// user.auth.ts
+
+// Shared authentication middleware used by the Collection, Retrieval, and
+// Visualisation Lambda services to verify incoming requests.
+
+// In production (AUTH_BYPASS=false):
+  // Verifies the Bearer JWT token in the Authorization header using
+  // the Cognito User Pool configured via environment variables.
+  // Extracts the user's unique ID from the token's `sub` (subject) claim
+  // and attaches it to the request as `req.userId`.
+
+// In local development / CI (AUTH_BYPASS=true):
+  // Skips JWT verification entirely.
+  // Uses the `x-user-id` header value as the userId, falling back to "local-user".
+  // This allows the LocalStack environment to function without real Cognito tokens.
+
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../../shared/types/auth.type";

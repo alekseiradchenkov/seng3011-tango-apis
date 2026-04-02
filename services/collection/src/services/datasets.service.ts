@@ -1,3 +1,18 @@
+// datasets.service.ts
+
+// Core business logic for the Collection service.
+// Handles creating, reading, updating, and deleting datasets, as well as
+// fetching and removing events within a dataset.
+
+// Storage layout:
+  // DynamoDB (EVENT_INDEX_TABLE): stores lightweight dataset metadata
+  // using a composite key of PK = "USER#<userId>" and SK = "DATASET#<datasetId>".
+  // S3 (EVENTS_BUCKET): stores the full ADAGE-format event payload as JSON
+  // at "datasets/<userId>/<datasetId>.json".
+
+// This two-store design keeps DynamoDB lean (fast list queries) while S3
+// handles the large event payloads cheaply.
+
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
@@ -19,12 +34,21 @@ import {
 import { nowTimeObject } from "../../../../shared/utils/time.util";
 import { getYahooEod } from "./yahoo.service";
 
+
+// ENVIRONMENT + AWS CLIENT HELPERS
+
+// Reads a required environment variable and throws a descriptive error if missing.
+// Ensures the Lambda fails fast at invocation time rather than silently misbehaving.
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing environment variable: ${name}`);
   return v;
 }
 
+// Resolves the AWS endpoint URL for local development and CI.
+  // AWS_ENDPOINT_URL: explicitly set custom endpoint (e.g. in GitHub Actions).
+  // LOCALSTACK_HOSTNAME: set automatically by LocalStack docker-compose.
+  // undefined: fall through to real AWS regional endpoint in production.
 function getAwsEndpoint(): string | undefined {
   if (process.env.AWS_ENDPOINT_URL) return process.env.AWS_ENDPOINT_URL;
   const host = process.env.LOCALSTACK_HOSTNAME;
@@ -32,6 +56,8 @@ function getAwsEndpoint(): string | undefined {
   return undefined;
 }
 
+// Creates a DynamoDB Document client configured for the current environment.
+// removeUndefinedValues prevents DynamoDB from rejecting items with undefined fields.
 function getDdbDocClient() {
   const endpoint = getAwsEndpoint();
   const ddb = new DynamoDBClient({
@@ -41,6 +67,8 @@ function getDdbDocClient() {
   return DynamoDBDocumentClient.from(ddb, { marshallOptions: { removeUndefinedValues: true } });
 }
 
+// Creates an S3 client configured for the current environment.
+// forcePathStyle is required for LocalStack which does not support virtual-hosted-style URLs.
 function getS3Client() {
   const endpoint = getAwsEndpoint();
   return new S3Client({
@@ -50,16 +78,29 @@ function getS3Client() {
   });
 }
 
+// DYANMO_DB KEY HELPERS
+
+// Returns the DynamoDB partition key for a user's records.
 function metaPk(userId: string) {
   return `USER#${userId}`;
 }
+
+// Returns the DynamoDB sort key for a specific dataset record.
 function metaSk(datasetId: string) {
   return `DATASET#${datasetId}`;
 }
+
+//  Returns the S3 object key for a dataset's full event payload.
+// Namespaced by userId to keep each user's data isolated in the bucket.
 function datasetS3Key(userId: string, datasetId: string) {
   return `datasets/${userId}/${datasetId}.json`;
 }
 
+// S3 HELPERS
+
+// Reads and parses a JSON object from S3.
+  // Returns null if the object does not exist (NoSuchKey) or the body is empty.
+  // All other S3 errors are also swallowed and return null to avoid crashing callers.
 async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
   const s3 = getS3Client();
   try {
@@ -72,7 +113,8 @@ async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
     return null;
   }
 }
-
+// Serialises a value as JSON and writes it to an S3 object.
+// Overwrites any existing object at the same key (last-write-wins).
 async function s3WriteJson(bucket: string, key: string, value: unknown) {
   const s3 = getS3Client();
   await s3.send(
@@ -85,6 +127,11 @@ async function s3WriteJson(bucket: string, key: string, value: unknown) {
   );
 }
 
+// DATA SHAPE HELPERS
+
+// Constructs an AdageData response object from stored metadata and a list of events.
+// Only includes optional fields (name, description) when they are defined to keep
+// the response clean and avoid sending null values to consumers.
 function toAdageData(meta: DatasetMetadata, events: AdageEvent[]): AdageData {
   return {
     data_source: meta.data_source,
@@ -96,6 +143,8 @@ function toAdageData(meta: DatasetMetadata, events: AdageEvent[]): AdageData {
     events,
   };
 }
+
+// EXPORTED SERVICE FUNCTIONS
 
 function parseEventTimeMs(event: AdageEvent): number {
   const raw = event.time_object?.timestamp ?? "";
@@ -235,6 +284,8 @@ function deriveEvents(rawEvents: AdageEvent[]): DerivationSummary {
   return { derivedEvents, eventTypeCounts };
 }
 
+// Returns all datasets belonging to a user (metadata only, no events).
+// Queries DynamoDB using the user's partition key to list all DATASET# sort keys.
 export async function getDatasets(userId: string): Promise<AdageData[]> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const ddb = getDdbDocClient();
@@ -254,6 +305,9 @@ export async function getDatasets(userId: string): Promise<AdageData[]> {
   );
 }
 
+// Creates a new empty dataset for a user.
+// Generates a unique datasetId, writes metadata to DynamoDB, and creates
+// an empty ADAGE-format JSON file in S3 to hold future events.
 export async function createDataset(
   userId: string,
   input: DatasetCreateInput,
@@ -262,6 +316,7 @@ export async function createDataset(
   const eventsBucket = requireEnv("EVENTS_BUCKET");
   const ddb = getDdbDocClient();
 
+  // Generate a unique dataset ID using timestamp + random hex suffix.
   const datasetId = `dataset_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
   const meta: DatasetMetadata = {
     data_source: "YahooFinance",
@@ -274,6 +329,7 @@ export async function createDataset(
     filters: {},
   };
 
+  // Write metadata to DynamoDB.
   await ddb.send(
     new PutCommand({
       TableName: table,
@@ -285,12 +341,17 @@ export async function createDataset(
     }),
   );
 
+  // Create an empty dataset file in S3 so future event fetches have a base to append to.
   const adageData = toAdageData(meta, []);
   await s3WriteJson(eventsBucket, datasetS3Key(userId, datasetId), adageData);
 
   return adageData;
 }
 
+// Retrieves a single dataset including its first 100 events.
+// The 100-event cap prevents Lambda timeouts on large datasets;
+// callers needing more events should use the events endpoint with pagination.
+// Returns null if the dataset does not exist or does not belong to this user.
 export async function getDataset(
   userId: string,
   datasetId: string,
@@ -313,6 +374,9 @@ export async function getDataset(
   return toAdageData(meta, events.slice(0, 100));
 }
 
+// Updates the name and/or description of an existing dataset.
+// Also updates the time_object to reflect the modification timestamp.
+// Returns null if the dataset does not exist.
 export async function updateDataset(
   userId: string,
   datasetId: string,
@@ -347,6 +411,10 @@ export async function updateDataset(
   return toAdageData(out.Attributes as unknown as DatasetMetadata, []);
 }
 
+// Deletes a dataset's DynamoDB metadata record.
+// The S3 event payload is replaced with a tombstone marker rather than deleted
+// (best-effort soft-delete) so data is not permanently lost on accidental delete.
+// Returns 1 if deleted, 0 if the dataset was not found.
 export async function deleteDataset(userId: string, datasetId: string): Promise<number> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const eventsBucket = requireEnv("EVENTS_BUCKET");
@@ -372,6 +440,12 @@ export async function deleteDataset(userId: string, datasetId: string): Promise<
   return 1;
 }
 
+// Fetches OHLC events from Yahoo Finance and appends them to an existing dataset.
+// Symbols are converted from ADAGE format (e.g. "AAPL.XNAS") to bare tickers
+// ("AAPL") before calling Yahoo, then restored to the original format in the output.
+
+// Existing events are preserved; new events are merged and deduplicated by timestamp+symbol.
+// Returns null if the dataset does not exist.
 export async function fetchEvents(
   userId: string,
   datasetId: string,
@@ -446,6 +520,9 @@ export async function fetchEvents(
   };
 }
 
+// Removes events from a dataset based on optional symbol and date-range filters.
+// Reads the full event list from S3, filters out matching events, and writes back.
+// Returns null if the dataset does not exist.
 export async function removeEvents(
   userId: string,
   datasetId: string,

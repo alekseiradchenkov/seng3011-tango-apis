@@ -4,6 +4,7 @@ import morgan from "morgan";
 
 import routes from "./routes";
 
+/** Express app for Retrieval. */
 export const app = express();
 
 app.use(cors());

@@ -4,6 +4,10 @@ import swaggerUi from "swagger-ui-express";
 import * as path from "path";
 import * as fs from "fs";
 
+/**
+ * Express app serving Swagger UI at `/docs` and simple health at `/status`.
+ * Used by the `DocsFunction` Lambda behind API Gateway.
+ */
 const app = express();
 
 const specPath = path.resolve(__dirname, "swagger.json");
@@ -27,4 +31,5 @@ app.get("/status", (_req, res) => {
 
 app.use((_req, res) => res.status(404).json({ error: "NOT_FOUND" }));
 
+/** Lambda handler wrapping the docs Express app for API Gateway. */
 export const handler = serverlessExpress({ app });

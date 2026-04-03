@@ -1,8 +1,10 @@
 import { Router, Request, Response } from "express";
 import { signup, login, logout } from "../services/cognitoAuth.service";
 
+/** Auth HTTP routes mounted at `/auth` (e.g. `POST /auth/signup`). */
 const router = Router();
 
+/** `POST /auth/signup` — create user; 201 on success, 409 if user exists. */
 router.post("/signup", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body ?? {};
@@ -33,6 +35,7 @@ router.post("/signup", async (req: Request, res: Response) => {
   }
 });
 
+/** `POST /auth/login` — returns Cognito tokens or 401. */
 router.post("/login", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body ?? {};
@@ -54,6 +57,7 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
+/** `POST /auth/logout` — global sign-out using `Authorization: Bearer` or body `accessToken`. */
 router.post("/logout", async (req: Request, res: Response) => {
   try {
     const auth = req.headers.authorization;

@@ -3,6 +3,7 @@ import routes from "./routes";
 import cors from "cors";
 import morgan from "morgan";
 
+/** Express app for Collection (local or Lambda). */
 export const app = express();
 
 app.use(cors());

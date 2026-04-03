@@ -11,8 +11,10 @@ import {
   getEventStats,
 } from "../services/retrieval.service";
 
+/** Read-only dataset/event routes (JWT required). */
 const router = Router();
 
+/** Express async wrapper forwarding to `next` on rejection. */
 function asyncHandler(
   fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>,
 ) {
@@ -23,6 +25,7 @@ function asyncHandler(
 
 router.use(checkAuth);
 
+/** `GET /datasets` */
 router.get(
   "/datasets",
   asyncHandler(async (req, res) => {
@@ -30,6 +33,7 @@ router.get(
   }),
 );
 
+/** `GET /datasets/:datasetId` */
 router.get(
   "/datasets/:datasetId",
   asyncHandler(async (req, res) => {
@@ -42,6 +46,7 @@ router.get(
   }),
 );
 
+/** `GET /datasets/:datasetId/events` */
 router.get(
   "/datasets/:datasetId/events",
   asyncHandler(async (req, res) => {
@@ -55,6 +60,7 @@ router.get(
   }),
 );
 
+/** `GET /datasets/:datasetId/events/stats` */
 router.get(
   "/datasets/:datasetId/events/stats",
   asyncHandler(async (req, res) => {
@@ -68,6 +74,7 @@ router.get(
   }),
 );
 
+/** `GET /datasets/:datasetId/export` */
 router.get(
   "/datasets/:datasetId/export",
   asyncHandler(async (req, res) => {

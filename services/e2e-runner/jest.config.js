@@ -2,9 +2,8 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   maxWorkers: 1,
-  testPathIgnorePatterns: ["/node_modules/", "test/visualisation.test.ts"],
   coverageReporters: ["text", "lcov", "html", "json-summary"],
   transform: {
-    "^.+\\.(ts|tsx|js)$": "ts-jest",
+    "^.+\\.(ts|tsx)$": "ts-jest",
   },
 };

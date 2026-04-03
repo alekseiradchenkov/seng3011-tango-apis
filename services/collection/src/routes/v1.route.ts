@@ -16,8 +16,12 @@ import {
   assertValidParam,
 } from "../../../../shared/utils/error.util";
 
+/** Collection routes (JWT required via {@link checkAuth}). */
 const router = Router();
 
+/**
+ * Wraps an async Express handler so rejections are passed to `next`.
+ */
 function asyncHandler(
   fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>,
 ) {
@@ -26,9 +30,9 @@ function asyncHandler(
   };
 }
 
-/* Get and verify userId (see ../../../../shared/auth/user.auth) */
 router.use(checkAuth);
 
+/** `POST /datasets` — create dataset. */
 router.post(
   "/datasets",
   asyncHandler(async (req, res) => {
@@ -45,6 +49,7 @@ router.post(
   }),
 );
 
+/** `PUT /datasets/:datasetId` — update metadata. */
 router.put(
   "/datasets/:datasetId",
   asyncHandler(async (req, res) => {
@@ -62,6 +67,7 @@ router.put(
   }),
 );
 
+/** `DELETE /datasets/:datasetId` */
 router.delete(
   "/datasets/:datasetId",
   asyncHandler(async (req, res) => {
@@ -71,6 +77,7 @@ router.delete(
   }),
 );
 
+/** `PUT /datasets/:datasetId/events` — fetch Yahoo data and merge. */
 router.put(
   "/datasets/:datasetId/events",
   asyncHandler(async (req, res) => {
@@ -110,6 +117,7 @@ router.put(
   }),
 );
 
+/** `DELETE /datasets/:datasetId/events` — remove events by filter. */
 router.delete(
   "/datasets/:datasetId/events",
   asyncHandler(async (req, res) => {

@@ -1,3 +1,7 @@
+/**
+ * Visualisation routes: candlestick PNG from `stock_ohlc` events in S3 (software rasterizer, no Canvas GPU).
+ */
+
 import { Request, Response, NextFunction, Router } from "express";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { PNG } from "pngjs";
@@ -6,12 +10,14 @@ import { checkAuth } from "../../../../shared/auth/user.auth";
 
 const router = Router();
 
+/** @throws if env var missing */
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing environment variable: ${name}`);
   return v;
 }
 
+/** LocalStack / custom endpoint when set. */
 function getAwsEndpoint(): string | undefined {
   if (process.env.AWS_ENDPOINT_URL) return process.env.AWS_ENDPOINT_URL;
   const host = process.env.LOCALSTACK_HOSTNAME;
@@ -19,6 +25,7 @@ function getAwsEndpoint(): string | undefined {
   return undefined;
 }
 
+/** S3 client with path-style URLs. */
 function getS3Client() {
   const endpoint = getAwsEndpoint();
   return new S3Client({
@@ -38,6 +45,7 @@ interface AdageData {
   events: AdageEvent[];
 }
 
+/** Reads JSON from S3 or `null`. */
 async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
   const s3 = getS3Client();
   try {
@@ -50,6 +58,7 @@ async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
   }
 }
 
+/** Dataset JSON key in the events bucket. */
 function datasetS3Key(userId: string, datasetId: string) {
   return `datasets/${userId}/${datasetId}.json`;
 }
@@ -57,11 +66,13 @@ function datasetS3Key(userId: string, datasetId: string) {
 const CHART_WIDTH = 960;
 const CHART_HEIGHT = 540;
 
+/** Finite number or null. */
 function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   return null;
 }
 
+/** Date portion of a Yahoo-style timestamp for axis labels. */
 function dateLabelFromTimestamp(ts: string): string {
   // Expected format: "YYYY-MM-DD HH:mm:ss.sss" (from stored Yahoo EOD mapping).
   // We only show the date part to avoid overly long labels.
@@ -76,6 +87,9 @@ type Candle = {
   close: number | null;
 };
 
+/**
+ * Renders a candlestick chart into a PNG buffer using `pngjs` pixel operations.
+ */
 async function renderChartWithCanvas(
   labels: string[],
   xAxisTitle: string,
@@ -197,6 +211,7 @@ async function renderChartWithCanvas(
 
 router.use(checkAuth);
 
+/** Query string for `GET /charts`. */
 interface ChartQueryParams {
   dataset_id?: string;
   x_axis?: "timestamp" | "symbol";
@@ -206,6 +221,7 @@ interface ChartQueryParams {
   title?: string;
 }
 
+/** `GET /charts` — PNG candlestick for a dataset’s OHLC events. */
 router.get("/charts", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as unknown as { userId: string }).userId;

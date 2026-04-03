@@ -5,3 +5,6 @@ dist
 cdk/cdk.out
 coverage/
 **/coverage/
+coverage-combined/
+merged.lcov
+coverage-parts/

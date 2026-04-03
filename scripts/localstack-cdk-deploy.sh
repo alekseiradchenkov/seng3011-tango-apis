@@ -45,18 +45,56 @@ BASE="http://localhost:4566/_aws/execute-api/${API_ID}"
 
 cd "${ROOT_DIR}"
 
+# Point the CDK-deployed E2E runner Lambda at LocalStack from inside Lambda networking.
+LS_ENDPOINT="http://localhost:4566"
+LAMBDA_LOCALSTACK_HOST=${LAMBDA_LOCALSTACK_HOST:-localstack}
+E2E_BASE="http://${LAMBDA_LOCALSTACK_HOST}:4566/_aws/execute-api/${API_ID}"
+E2E_FN=""
+for REGION_TRY in "${AWS_DEFAULT_REGION:-ap-southeast-2}" "us-east-1"; do
+  E2E_FN="$(aws --endpoint-url="${LS_ENDPOINT}" cloudformation describe-stacks \
+    --region "${REGION_TRY}" \
+    --stack-name "FinancialEventsStack-dev" \
+    --query "Stacks[0].Outputs[?OutputKey=='E2eRunnerFunctionName'].OutputValue" \
+    --output text 2>/dev/null || true)"
+  if [ -n "${E2E_FN}" ] && [ "${E2E_FN}" != "None" ]; then
+    export AWS_DEFAULT_REGION="${REGION_TRY}"
+    break
+  fi
+done
+
+if [ -n "${E2E_FN}" ] && [ "${E2E_FN}" != "None" ]; then
+  echo "[localstack-cdk] Configuring E2E runner Lambda (${E2E_FN}) with API_BASE_URL=${E2E_BASE} ..."
+  aws --endpoint-url="${LS_ENDPOINT}" lambda update-function-configuration \
+    --region "${AWS_DEFAULT_REGION}" \
+    --function-name "${E2E_FN}" \
+    --environment "Variables={API_BASE_URL=${E2E_BASE}}" \
+    >/dev/null
+  # Wait until the new configuration is active (LocalStack may ignore 'wait'; short sleep is harmless).
+  sleep 2 || true
+else
+  echo "[localstack-cdk] WARNING: Could not resolve E2eRunnerFunctionName from stack outputs; skip E2E Lambda env update."
+fi
+
 cat > .localstack-api.env <<EOF
 API_ID=${API_ID}
 BASE=${BASE}
+E2E_RUNNER_FUNCTION_NAME=${E2E_FN}
 EOF
 
 echo "==============================================="
 echo "[cdk-deploy] LocalStack Financial Events API is ready."
 echo "API_ID: ${API_ID}"
 echo "BASE:   ${BASE}"
+if [ -n "${E2E_FN}" ] && [ "${E2E_FN}" != "None" ]; then
+  echo "E2E runner Lambda: ${E2E_FN}"
+fi
 echo
-echo "To run Newman locally:"
+echo "To run Newman locally (same collections as the E2E Lambda):"
 echo "  source .localstack-api.env"
-echo "  npx -y newman run postman/financial-events-localstack.collection.json --env-var apiId=\"\$API_ID\""
+echo "  newman run integration-tests/integration-test-1.collection.json --env-var apiId=\"\$API_ID\""
+echo
+echo "To invoke the E2E runner Lambda (runs all integration-test-*.collection.json):"
+echo "  source .localstack-api.env"
+echo "  aws --endpoint-url=${LS_ENDPOINT} lambda invoke --region \${AWS_DEFAULT_REGION} --function-name \"\$E2E_RUNNER_FUNCTION_NAME\" --cli-binary-format raw-in-base64-out --payload '{}' /tmp/e2e-out.json && cat /tmp/e2e-out.json"
 echo "==============================================="
 

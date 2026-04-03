@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, collection, retrieval, visualisation]
+        service: [auth, collection, retrieval, visualisation, e2e-runner]
 
     defaults:
       run:
@@ -35,7 +35,40 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm test -- --coverage
+        run: |
+          mkdir -p coverage
+          npm test -- --coverage 2>&1 | tee coverage/jest-coverage-log.txt
+
+      - name: Append coverage summary to job summary
+        if: always()
+        working-directory: services/${{ matrix.service }}
+        env:
+          SVC_NAME: ${{ matrix.service }}
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const p = "coverage/coverage-summary.json";
+          if (!fs.existsSync(p)) {
+            console.log("No coverage/coverage-summary.json");
+            process.exit(0);
+          }
+          const s = JSON.parse(fs.readFileSync(p, "utf8"));
+          const total = s.total || {};
+          const lines = [
+            "### Jest coverage: " + process.env.SVC_NAME,
+            "",
+            "| Metric | Covered |",
+            "| --- | --- |",
+          ];
+          for (const key of ["lines", "statements", "functions", "branches"]) {
+            const v = total[key];
+            if (v && typeof v.pct === "number") {
+              lines.push("| " + key + " | " + v.pct + "% |");
+            }
+          }
+          lines.push("");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
+          NODE
 
       - name: Upload coverage artifact
         if: always()
@@ -43,4 +76,83 @@ jobs:
         with:
           name: coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage
+          if-no-files-found: warn
+
+  coverage-aggregate:
+    name: coverage-combined
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Matrix legs may fail before upload; downloads use continue-on-error so we still merge partial inputs.
+      - name: Download coverage-auth
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-auth
+          path: coverage-parts/auth
+
+      - name: Download coverage-collection
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-collection
+          path: coverage-parts/collection
+
+      - name: Download coverage-retrieval
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-retrieval
+          path: coverage-parts/retrieval
+
+      - name: Download coverage-visualisation
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-visualisation
+          path: coverage-parts/visualisation
+
+      - name: Download coverage-e2e-runner
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-e2e-runner
+          path: coverage-parts/e2e-runner
+
+      - name: Generate combined coverage report (Markdown + JSON)
+        run: |
+          set -euo pipefail
+          mkdir -p coverage-parts
+          node scripts/generate-coverage-report.js coverage-parts coverage-combined
+
+      - name: Append combined coverage report to workflow summary
+        if: always()
+        run: |
+          if [ -f coverage-combined/COVERAGE-REPORT.md ]; then
+            {
+              echo ""
+              cat coverage-combined/COVERAGE-REPORT.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload combined coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-combined
+          path: |
+            coverage-combined/coverage-summary.json
+            coverage-combined/COVERAGE-REPORT.md
+            coverage-combined/COVERAGE-REPORT.txt
           if-no-files-found: warn

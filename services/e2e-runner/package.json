@@ -1,0 +1,23 @@
+{
+  "name": "e2e-runner",
+  "version": "1.0.0",
+  "description": "Lambda that runs Newman integration tests against the Financial Events HTTP API",
+  "license": "ISC",
+  "type": "commonjs",
+  "main": "src/lambda.ts",
+  "scripts": {
+    "test": "jest",
+    "tsc": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "newman": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.10.0",
+    "esbuild": "0.28.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -54,7 +54,7 @@ jobs:
 
       - name: Install service dependencies
         run: |
-          for svc in auth collection retrieval visualisation; do
+          for svc in auth collection retrieval visualisation e2e-runner; do
             echo "Installing $svc..."
             npm ci --prefix "services/$svc"
           done
@@ -104,6 +104,16 @@ jobs:
           echo "============================================================"
           echo "api_url=${API_URL}" >> "$GITHUB_OUTPUT"
 
+      - name: Invoke E2E runner Lambda (dev)
+        working-directory: cdk
+        run: |
+          FN=$(node -e "const o=require('./cdk-outputs.json'); const s=Object.values(o)[0]; console.log(s.E2eRunnerFunctionName || '')")
+          if [ -z "${FN}" ]; then echo "Missing E2eRunnerFunctionName in cdk-outputs.json" >&2; exit 1; fi
+          echo "Invoking E2E runner: ${FN}"
+          aws lambda invoke --function-name "${FN}" --cli-binary-format raw-in-base64-out --payload '{}' /tmp/e2e-out.json
+          cat /tmp/e2e-out.json
+          node -e "const r=JSON.parse(require('fs').readFileSync('/tmp/e2e-out.json','utf8')); if(!r.ok){console.error('E2E runner reported failure'); process.exit(1);}"
+
   deploy-prod:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_prod == 'true'
     needs: deploy-dev
@@ -141,7 +151,7 @@ jobs:
 
       - name: Install service dependencies
         run: |
-          for svc in auth collection retrieval visualisation; do
+          for svc in auth collection retrieval visualisation e2e-runner; do
             echo "Installing $svc..."
             npm ci --prefix "services/$svc"
           done

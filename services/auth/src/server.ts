@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import routes from "./routes";
 
+/** Express application for the Auth microservice (local server or Lambda via `lambda.ts`). */
 export const app = express();
 
 app.use(cors());

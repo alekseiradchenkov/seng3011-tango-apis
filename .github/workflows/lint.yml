@@ -1,3 +1,4 @@
+# ESLint + TypeScript check per service. Jest coverage runs in `.github/workflows/test.yml`.
 name: lint
 
 on:

@@ -49,6 +49,8 @@ docker compose up -d
 bash scripts/localstack-cdk-deploy.sh
 ```
 
+The stack uses **AWS Lambda Node.js 18** (`nodejs18.x`). LocalStack’s emulator does not accept `nodejs20.x`; production AWS still runs this stack fine on 18.x. Use Node 20+ locally for npm/CDK if you prefer.
+
 3. Load generated API environment values.
 
 ```bash
@@ -75,6 +77,29 @@ newman run integration-tests/integration-test-4.collection.json --env-var apiId=
 # system-test-5
 newman run integration-tests/integration-test-5.collection.json --env-var apiId="$API_ID"
 ```
+
+5. (Optional) Invoke the **E2E runner Lambda** deployed by CDK (runs all five Newman collections in one call). After `bash scripts/localstack-cdk-deploy.sh`, `source .localstack-api.env` sets `E2E_RUNNER_FUNCTION_NAME` and the script has already pointed the function at `BASE`.
+
+```bash
+source .localstack-api.env
+aws --endpoint-url=http://localhost:4566 lambda invoke \
+  --region "${AWS_DEFAULT_REGION}" \
+  --function-name "$E2E_RUNNER_FUNCTION_NAME" \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{}' /tmp/e2e-out.json && cat /tmp/e2e-out.json
+```
+
+The response JSON includes `ok: true` when every collection run succeeds.
+
+## CI: coverage reports
+
+The **test** workflow (`.github/workflows/test.yml`) runs Jest with coverage per service in a matrix (`auth`, `collection`, `retrieval`, `visualisation`, `e2e-runner`).
+
+- **Per-service artifacts** — For each matrix job, download `coverage-<service>` to inspect that service’s `coverage/` tree (HTML under `lcov-report/`, `lcov.info`, `coverage-summary.json`). Use these when debugging a single service.
+- **Combined artifact** — The `coverage-combined` job (runs after all matrix jobs) merges every downloaded `lcov.info` into one HTML report and merges `coverage-summary.json` totals into `coverage-combined/coverage-summary.json`. Download the **`coverage-combined`** artifact and open `lcov-report/index.html` for a platform-wide view; line coverage is merged across services (paths remain distinct in the report).
+- **Workflow summary** — The same job appends a **“Combined Jest coverage (all services)”** table to the GitHub Actions run summary (lines / statements / functions / branches), so you get one headline percentage row without opening artifacts.
+
+Locally, merged summary JSON can be regenerated with `node scripts/aggregate-coverage-summary.js <dir-with-artifacts> <out-file>`.
 
 ## Per-Service Docker (Not Recommended)
 

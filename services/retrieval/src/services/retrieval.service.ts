@@ -1,18 +1,9 @@
+/**
+ * Retrieval service: read-only dataset and event access (DynamoDB metadata + S3 payloads).
+ *
+ * @remarks Mutations belong to the Collection service only.
+ */
 
-// retrieval.service.ts
-
-// Business logic for the Retrieval service.
-// Provides read-only access to datasets and their events stored in DynamoDB and S3.
-
-// This service is intentionally read-only — it never writes to DynamoDB or S3.
-// All mutations go through the Collection service.
-
-// Key responsibilities:
-  // List and fetch dataset metadata from DynamoDB
-  // Read full event payloads from S3
-  // Filter, sort, and paginate events in-memory
-  //Export filtered events as CSV
- 
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
@@ -23,16 +14,14 @@ import {
 
 import { AdageData, AdageEvent } from "../../../../shared/types/adage.type";
 
-// ---------------------------------------------------------------------------
-// AWS client helpers
-// ---------------------------------------------------------------------------
-
+/** @throws Error if unset. */
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing environment variable: ${name}`);
   return v;
 }
 
+/** Optional LocalStack / custom endpoint. */
 function getAwsEndpoint(): string | undefined {
   if (process.env.AWS_ENDPOINT_URL) return process.env.AWS_ENDPOINT_URL;
   const host = process.env.LOCALSTACK_HOSTNAME;
@@ -40,6 +29,7 @@ function getAwsEndpoint(): string | undefined {
   return undefined;
 }
 
+/** DynamoDB DocumentClient. */
 function getDdbDocClient() {
   const endpoint = getAwsEndpoint();
   const ddb = new DynamoDBClient({
@@ -51,6 +41,7 @@ function getDdbDocClient() {
   });
 }
 
+/** S3 client (path-style for LocalStack). */
 function getS3Client() {
   const endpoint = getAwsEndpoint();
   return new S3Client({
@@ -60,29 +51,21 @@ function getS3Client() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// DynamoDB key helpers
-// ---------------------------------------------------------------------------
-
 function metaPk(userId: string) {
   return `USER#${userId}`;
 }
 function metaSk(datasetId: string) {
   return `DATASET#${datasetId}`;
 }
+
+/** S3 object key for dataset JSON. */
 export function datasetS3Key(userId: string, datasetId: string) {
   return `datasets/${userId}/${datasetId}.json`;
 }
 
-// ---------------------------------------------------------------------------
-// S3 helper
-// ---------------------------------------------------------------------------
-
-
-
-// Reads and parses a JSON object from S3.
-// Returns null for missing objects or empty/unparseable responses.
-// Swallows all S3 errors to avoid crashing callers on missing data.
+/**
+ * Reads JSON from S3; returns `null` on missing or unreadable objects.
+ */
 export async function s3ReadJson<T>(bucket: string, key: string): Promise<T | null> {
   const s3 = getS3Client();
   try {
@@ -95,14 +78,9 @@ export async function s3ReadJson<T>(bucket: string, key: string): Promise<T | nu
   }
 }
 
-// ---------------------------------------------------------------------------
-// Event filtering / sorting helpers
-// ---------------------------------------------------------------------------
-
-// Parses the timestamp from an ADAGE event's time_object into a Unix millisecond value.
-// Handles both ISO 8601 format ("2026-03-01T00:00:00Z") and the space-separated
-// variant ("2026-03-01 00:00:00") used in Yahoo Finance output.
-// Returns NaN if the timestamp is missing or unparseable.
+/**
+ * Parses an event timestamp to epoch ms (ISO or space-separated Yahoo-style).
+ */
 export function parseEventTime(event: AdageEvent): number {
   const raw = event.time_object?.timestamp;
   if (!raw) return Number.NaN;
@@ -110,21 +88,16 @@ export function parseEventTime(event: AdageEvent): number {
   return Date.parse(iso);
 }
 
-
-// Parses a date query parameter string (e.g. "2026-03-01") into Unix milliseconds.
-// Treats the date as midnight UTC (start of day) to give inclusive filtering on date_from.
-// Returns null for empty, non-string, or unparseable values so callers can skip filtering.
+/**
+ * Parses `YYYY-MM-DD` query values to start-of-day UTC ms, or `null`.
+ */
 export function parseDateQuery(v: unknown): number | null {
   if (typeof v !== "string" || v.length === 0) return null;
   const ms = Date.parse(`${v}T00:00:00Z`);
   return Number.isNaN(ms) ? null : ms;
 }
 
-
-// Formats a single CSV row from an array of values.
-// Applies RFC 4180 quoting rules: wraps values in double-quotes if they contain
-// commas, double-quotes, or newlines, and escapes embedded double-quotes by doubling them.
-// Null and undefined values are output as empty strings.
+/** RFC 4180 CSV row from values. */
 export function csv(values: (string | number | null | undefined)[]): string {
   return values
     .map((v) => {
@@ -147,17 +120,11 @@ export interface EventQueryParams {
   limit?: unknown;
 }
 
-// Filters a list of events based on the provided query parameters.
-
-// Supported filters:
-  // start_date / end_date: inclusive date range (YYYY-MM-DD).
-  // companies: CSV or array of ticker symbols or company names (partial match).
-  // event_type: exact match on the event_type field (e.g. "stock_ohlc").
+/** Applies date, company, and `event_type` filters. */
 export function filterEvents(events: AdageEvent[], params: EventQueryParams): AdageEvent[] {
   const startMs = parseDateQuery(params.start_date);
   const endMs = parseDateQuery(params.end_date);
-  
-  // Accept companies as a comma-separated string or an array.
+
   const companies =
     typeof params.companies === "string"
       ? params.companies.split(",").map((s) => s.trim()).filter(Boolean)
@@ -183,13 +150,7 @@ export function filterEvents(events: AdageEvent[], params: EventQueryParams): Ad
   });
 }
 
-// Sorts a filtered event list by a field and truncates to the requested limit.
-
-// Sort behaviour:
-  // sort="time" (default): sort by event timestamp.
-  // order="DESC" (default): most recent events first.
-  // order="ASC": oldest events first.
-  // limit: capped at 1000 to prevent excessively large responses.
+/** Sorts (default by time) and caps results (max 1000). */
 export function sortAndLimit(events: AdageEvent[], params: EventQueryParams): AdageEvent[] {
   const sortField = typeof params.sort === "string" ? params.sort : "time";
   const order = typeof params.order === "string" ? params.order : "DESC";
@@ -206,13 +167,9 @@ export function sortAndLimit(events: AdageEvent[], params: EventQueryParams): Ad
   return sorted.slice(0, safeLimit);
 }
 
-// ---------------------------------------------------------------------------
-// Exported service functions
-// ---------------------------------------------------------------------------
-
-
-// Returns all dataset metadata records for a user (no events included).
-// Queries DynamoDB by partition key to list all DATASET# sort keys efficiently.
+/**
+ * Lists dataset metadata rows for a user (no events).
+ */
 export async function getDatasets(userId: string): Promise<Record<string, unknown>[]> {
   const table = requireEnv("EVENT_INDEX_TABLE");
   const ddb = getDdbDocClient();
@@ -228,7 +185,6 @@ export async function getDatasets(userId: string): Promise<Record<string, unknow
     }),
   );
 
-  // Return only the public-facing fields; strip internal DynamoDB keys (PK, SK).
   return (out.Items ?? []).map((i: Record<string, unknown>) => ({
     dataset_id: i.dataset_id,
     name: i.name,
@@ -239,10 +195,9 @@ export async function getDatasets(userId: string): Promise<Record<string, unknow
   }));
 }
 
-
-// Retrieves a single dataset including its first 100 (protects against Lambda
-// timeout) events from S3.
-//  Returns null if the dataset does not exist or belongs to another user.
+/**
+ * Single dataset metadata (no events); `null` if missing.
+ */
 export async function getDataset(
   userId: string,
   datasetId: string,
@@ -269,10 +224,9 @@ export async function getDataset(
   };
 }
 
-
-// Retrieves events from a dataset, applying the provided filter, sort, and limit params.
-// Reads the full event payload from S3 and filters in-memory (suitable for MVP scale).
-// Returns null if the dataset does not exist.
+/**
+ * Filtered/sorted events with metadata; `null` if dataset missing.
+ */
 export async function getEvents(
   userId: string,
   datasetId: string,
@@ -309,8 +263,9 @@ export async function getEvents(
   };
 }
 
-// Returns aggregate statistics for a dataset's filtered events.
-// Returns null if the dataset does not exist.
+/**
+ * Event counts by `event_type` after filters; `null` if dataset missing.
+ */
 export async function getEventStats(
   userId: string,
   datasetId: string,
@@ -338,10 +293,10 @@ export async function getEventStats(
 
   return { total_events: filtered.length, event_type_counts };
 }
-// Exports filtered and sorted events from a dataset as a CSV string.
-// The CSV includes a header row followed by one row per event with fields:
-// symbol, open, high, low, close, volume, timestamp
-// Returns null if the dataset does not exist.
+
+/**
+ * CSV export of filtered OHLC rows; `null` if dataset missing.
+ */
 export async function exportEventsAsCsv(
   userId: string,
   datasetId: string,

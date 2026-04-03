@@ -1,4 +1,5 @@
 import * as path from "path";
+import * as fs from "fs";
 import {
   Stack,
   StackProps,
@@ -16,10 +17,26 @@ import { Construct } from "constructs";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 
+/**
+ * Node 18 is required for LocalStack: its Lambda emulator does not accept `nodejs20.x`.
+ * AWS Lambda supports 18.x for the same bundle; local dev may still use Node 20+ on the host.
+ */
+const LAMBDA_RUNTIME = Runtime.NODEJS_18_X;
+
+/**
+ * Props for {@link FinancialEventsStack}.
+ */
 interface FinancialEventsStackProps extends StackProps {
+  /**
+   * Deployment stage identifier (for example: `dev`, `prod`).
+   * Used to suffix resource names and exports.
+   */
   stage?: string;
 }
 
+/**
+ * CDK stack wiring together HTTP API, Lambdas, Cognito, DynamoDB, S3 and the E2E test runner.
+ */
 export class FinancialEventsStack extends Stack {
   constructor(scope: Construct, id: string, props?: FinancialEventsStackProps) {
     super(scope, id, props);
@@ -65,7 +82,7 @@ export class FinancialEventsStack extends Stack {
     const collectionFunction = new NodejsFunction(this, "CollectionFunction", {
       entry: path.join(__dirname, "..", "..", "services", "collection", "src", "lambda.ts"),
       depsLockFilePath: path.join(__dirname, "..", "..", "services", "collection", "package-lock.json"),
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_RUNTIME,
       timeout: Duration.seconds(30),
       bundling: {
         nodeModules: ["@vendia/serverless-express", "aws-jwt-verify", "cors", "express", "morgan"],
@@ -84,7 +101,7 @@ export class FinancialEventsStack extends Stack {
     const retrievalFunction = new NodejsFunction(this, "RetrievalFunction", {
       entry: path.join(__dirname, "..", "..", "services", "retrieval", "src", "lambda.ts"),
       depsLockFilePath: path.join(__dirname, "..", "..", "services", "retrieval", "package-lock.json"),
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_RUNTIME,
       timeout: Duration.seconds(30),
       bundling: {
         nodeModules: ["@vendia/serverless-express", "aws-jwt-verify", "cors", "express", "morgan"],
@@ -103,7 +120,7 @@ export class FinancialEventsStack extends Stack {
     const visualisationFunction = new NodejsFunction(this, "VisualisationFunction", {
       entry: path.join(__dirname, "..", "..", "services", "visualisation", "src", "lambda.ts"),
       depsLockFilePath: path.join(__dirname, "..", "..", "services", "visualisation", "package-lock.json"),
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_RUNTIME,
       timeout: Duration.seconds(60),
       memorySize: 1024,
       bundling: {
@@ -130,7 +147,7 @@ export class FinancialEventsStack extends Stack {
     const authFunction = new NodejsFunction(this, "AuthFunction", {
       entry: path.join(__dirname, "..", "..", "services", "auth", "src", "lambda.ts"),
       depsLockFilePath: path.join(__dirname, "..", "..", "services", "auth", "package-lock.json"),
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_RUNTIME,
       timeout: Duration.seconds(30),
       bundling: {
         nodeModules: ["@vendia/serverless-express", "cors", "express", "morgan"],
@@ -145,7 +162,7 @@ export class FinancialEventsStack extends Stack {
     // Docs Lambda (serves swagger and status)
     const docsFunction = new NodejsFunction(this, "DocsFunction", {
       entry: path.join(__dirname, "docs-handler.ts"),
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_RUNTIME,
       timeout: Duration.seconds(10),
       bundling: {
         nodeModules: ["@vendia/serverless-express", "cors", "express", "swagger-ui-express"],
@@ -272,6 +289,41 @@ export class FinancialEventsStack extends Stack {
       integration: visualisationIntegration,
     });
 
+    const integrationTestsRoot = path.join(__dirname, "..", "..", "integration-tests");
+    const integrationTestCollections = fs
+      .readdirSync(integrationTestsRoot)
+      .filter((f) => f.endsWith(".collection.json"));
+
+    // E2E runner Lambda (invoke via AWS CLI or CI; not exposed on the HTTP API)
+    const e2eRunnerFunction = new NodejsFunction(this, "E2eRunnerFunction", {
+      entry: path.join(__dirname, "..", "..", "services", "e2e-runner", "src", "lambda.ts"),
+      depsLockFilePath: path.join(__dirname, "..", "..", "services", "e2e-runner", "package-lock.json"),
+      runtime: LAMBDA_RUNTIME,
+      timeout: Duration.minutes(5),
+      memorySize: 1024,
+      bundling: {
+        nodeModules: ["newman"],
+        externalModules: ["@aws-sdk/*"],
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (_inputDir: string, outputDir: string) => {
+            const outDir = path.join(outputDir, "integration-tests");
+            // Copy all Postman collections shipped in `integration-tests/` without
+            // needing to update this stack when new ones are added.
+            const files = integrationTestCollections;
+            return [
+              `mkdir -p "${outDir}"`,
+              ...files.map((f) => `cp "${path.join(integrationTestsRoot, f)}" "${path.join(outDir, f)}"`),
+            ];
+          },
+        },
+      },
+      environment: {
+        API_BASE_URL: httpApi.url ?? "",
+      },
+    });
+
     // Outputs
     new CfnOutput(this, "ApiUrl", {
       value: httpApi.url ?? "",
@@ -289,6 +341,12 @@ export class FinancialEventsStack extends Stack {
       value: userPoolClient.userPoolClientId,
       description: `Cognito User Pool Client ID (${stage})`,
       exportName: `FinancialEventsCognitoClientId-${stage}`,
+    });
+
+    new CfnOutput(this, "E2eRunnerFunctionName", {
+      value: e2eRunnerFunction.functionName,
+      description: `E2E Newman runner Lambda name (${stage})`,
+      exportName: `FinancialEventsE2eRunnerFunctionName-${stage}`,
     });
   }
 }

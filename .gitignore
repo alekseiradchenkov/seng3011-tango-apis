@@ -8,3 +8,6 @@ coverage/
 coverage-combined/
 merged.lcov
 coverage-parts/
+lint/
+**/lint/
+lint-parts/

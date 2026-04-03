@@ -93,17 +93,18 @@ The response JSON includes `ok: true` when every collection run succeeds.
 
 ## CI: coverage reports
 
-The **test** workflow (`.github/workflows/test.yml`) runs Jest with coverage per service in a matrix (`auth`, `collection`, `retrieval`, `visualisation`, `e2e-runner`).
+The **test** workflow (`.github/workflows/test.yml`) runs a **lint** matrix and a **test** matrix over the same five services, then aggregates results into one report.
 
-- **Per-service artifacts** — Each matrix job saves Jest’s console output to `coverage/jest-coverage-log.txt` and uploads the full `coverage/` tree (`lcov-report/`, `lcov.info`, `coverage-summary.json`). Use these for line-level HTML and raw Jest text for one service.
-- **Combined artifact** — The `coverage-combined` job downloads those artifacts and runs `scripts/generate-coverage-report.js`, which reads each service’s `coverage-summary.json` (same numbers Jest prints in `--coverage`) and writes **`COVERAGE-REPORT.md`** (Markdown tables: one section per service + **Combined** totals), **`COVERAGE-REPORT.txt`** (plain text), and **`coverage-summary.json`** (merged totals). Open the `.md` or `.txt` in the **`coverage-combined`** artifact for a single readable report—no merged HTML/LCOV viewer required.
-- **Workflow summary** — The full **`COVERAGE-REPORT.md`** is appended to the run summary so you get the per-service + combined tables without opening artifacts.
+- **Per-service `coverage-*` artifacts** — Jest is run with `--coverage --json --outputFile=coverage/jest-results.json`. Uploaded `coverage/` includes **`jest-results.json`**, **`jest.exitcode`**, **`jest-coverage-log.txt`**, Istanbul outputs (`coverage-summary.json`, `lcov.info`, HTML, etc.).
+- **Per-service `lint-*` artifacts** — ESLint is run as **`npm run lint -- -f json -o lint/eslint-report.json`**, plus **`eslint.exitcode`**. (The standalone **lint** workflow in `lint.yml` still runs on the same events, so lint executes twice—once for this combined report, once as a dedicated check.)
+- **`coverage-combined` artifact** — The final job downloads all **`coverage-*`** and **`lint-*`** artifacts and runs **`scripts/generate-combined-ci-report.js`**, which writes **`COMBINED-CI-REPORT.md`** / **`.txt`** (overview table, per-service **Tests / Coverage / Lint**, failing tests with excerpts, ESLint findings table, combined coverage totals), **`coverage-summary.json`**, and compatibility copies **`COVERAGE-REPORT.*`** (same content as the combined report).
+- **Workflow summary** — The full **`COMBINED-CI-REPORT.md`** is appended to the GitHub Actions run summary.
 
-Locally: `node scripts/generate-coverage-report.js <coverage-parts-dir> <out-dir>` (or `node scripts/aggregate-coverage-summary.js` if you only need merged JSON).
+Locally: `node scripts/generate-combined-ci-report.js <coverage-parts-dir> <lint-parts-dir> <out-dir>` (or `node scripts/aggregate-coverage-summary.js` for merged coverage JSON only).
 
 ## CI: pull requests vs deploy (E2E)
 
-- **Pull requests** run the **test** workflow only (lint/unit tests per service, coverage aggregation). They do **not** deploy to AWS dev/prod.
+- **Pull requests** run the **test** workflow (lint + unit tests per service, combined report) and the **lint** workflow. They do **not** deploy to AWS dev/prod.
 - The matrix job named **`e2e-runner`** runs **Jest** in `services/e2e-runner` (unit tests for the runner code). That is unrelated to invoking the deployed Lambda.
 - **Newman / HTTP E2E** against the real API runs only after a **successful deploy** in **`aws-deploy`** (push to `main` or manual workflow), which invokes the **E2E runner Lambda** in AWS.
 

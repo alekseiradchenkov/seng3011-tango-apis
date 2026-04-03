@@ -7,6 +7,50 @@ on:
     branches: ["main"]
 
 jobs:
+  lint:
+    name: "lint-${{ matrix.service }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, collection, retrieval, visualisation, e2e-runner]
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint (JSON report for combined CI summary)
+        run: |
+          mkdir -p lint
+          set +e
+          npm run lint -- -f json -o lint/eslint-report.json
+          echo $? > lint/eslint.exitcode
+          set -e
+          exit "$(cat lint/eslint.exitcode)"
+
+      - name: Upload lint report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-${{ matrix.service }}
+          path: services/${{ matrix.service }}/lint
+          if-no-files-found: warn
+
   test:
     name: "${{ matrix.service }}"
     runs-on: ubuntu-latest
@@ -35,9 +79,13 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
+        shell: bash
         run: |
           mkdir -p coverage
-          npm test -- --coverage 2>&1 | tee coverage/jest-coverage-log.txt
+          set -o pipefail
+          npm test -- --coverage --json --outputFile=coverage/jest-results.json 2>&1 | tee coverage/jest-coverage-log.txt
+          echo ${PIPESTATUS[0]} > coverage/jest.exitcode
+          exit "$(cat coverage/jest.exitcode)"
 
       - name: Append coverage summary to job summary
         if: always()
@@ -80,7 +128,7 @@ jobs:
 
   coverage-aggregate:
     name: coverage-combined
-    needs: test
+    needs: [test, lint]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -130,29 +178,66 @@ jobs:
           name: coverage-e2e-runner
           path: coverage-parts/e2e-runner
 
-      - name: Generate combined coverage report (Markdown + JSON)
+      - name: Download lint-auth
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-auth
+          path: lint-parts/auth
+
+      - name: Download lint-collection
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-collection
+          path: lint-parts/collection
+
+      - name: Download lint-retrieval
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-retrieval
+          path: lint-parts/retrieval
+
+      - name: Download lint-visualisation
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-visualisation
+          path: lint-parts/visualisation
+
+      - name: Download lint-e2e-runner
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-e2e-runner
+          path: lint-parts/e2e-runner
+
+      - name: Generate combined CI report (tests + coverage + lint)
         run: |
           set -euo pipefail
-          mkdir -p coverage-parts
-          node scripts/generate-coverage-report.js coverage-parts coverage-combined
+          mkdir -p coverage-parts lint-parts
+          node scripts/generate-combined-ci-report.js coverage-parts lint-parts coverage-combined
 
-      - name: Append combined coverage report to workflow summary
+      - name: Append combined CI report to workflow summary
         if: always()
         run: |
-          if [ -f coverage-combined/COVERAGE-REPORT.md ]; then
+          if [ -f coverage-combined/COMBINED-CI-REPORT.md ]; then
             {
               echo ""
-              cat coverage-combined/COVERAGE-REPORT.md
+              cat coverage-combined/COMBINED-CI-REPORT.md
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Upload combined coverage artifact
+      - name: Upload combined CI artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-combined
           path: |
             coverage-combined/coverage-summary.json
+            coverage-combined/COMBINED-CI-REPORT.md
+            coverage-combined/COMBINED-CI-REPORT.txt
             coverage-combined/COVERAGE-REPORT.md
             coverage-combined/COVERAGE-REPORT.txt
           if-no-files-found: warn

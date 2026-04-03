@@ -95,11 +95,11 @@ The response JSON includes `ok: true` when every collection run succeeds.
 
 The **test** workflow (`.github/workflows/test.yml`) runs Jest with coverage per service in a matrix (`auth`, `collection`, `retrieval`, `visualisation`, `e2e-runner`).
 
-- **Per-service artifacts** — For each matrix job, download `coverage-<service>` to inspect that service’s `coverage/` tree (HTML under `lcov-report/`, `lcov.info`, `coverage-summary.json`). Use these when debugging a single service.
-- **Combined artifact** — The `coverage-combined` job (runs after all matrix jobs) merges every downloaded `lcov.info` into one HTML report and merges `coverage-summary.json` totals into `coverage-combined/coverage-summary.json`. Download the **`coverage-combined`** artifact and open `lcov-report/index.html` for a platform-wide **overview** (directory/file percentages). The merged HTML is generated **without per-file source views** so CI does not need every `src/...` path to resolve from the repo root (per-service LCOV often records paths like `src/server.ts`). Use a per-service **`coverage-*`** artifact (for example `coverage-auth`) for line-by-line HTML against real paths on disk.
-- **Workflow summary** — The same job appends a **“Combined Jest coverage (all services)”** table to the GitHub Actions run summary (lines / statements / functions / branches), so you get one headline percentage row without opening artifacts.
+- **Per-service artifacts** — Each matrix job saves Jest’s console output to `coverage/jest-coverage-log.txt` and uploads the full `coverage/` tree (`lcov-report/`, `lcov.info`, `coverage-summary.json`). Use these for line-level HTML and raw Jest text for one service.
+- **Combined artifact** — The `coverage-combined` job downloads those artifacts and runs `scripts/generate-coverage-report.js`, which reads each service’s `coverage-summary.json` (same numbers Jest prints in `--coverage`) and writes **`COVERAGE-REPORT.md`** (Markdown tables: one section per service + **Combined** totals), **`COVERAGE-REPORT.txt`** (plain text), and **`coverage-summary.json`** (merged totals). Open the `.md` or `.txt` in the **`coverage-combined`** artifact for a single readable report—no merged HTML/LCOV viewer required.
+- **Workflow summary** — The full **`COVERAGE-REPORT.md`** is appended to the run summary so you get the per-service + combined tables without opening artifacts.
 
-Locally, merged summary JSON can be regenerated with `node scripts/aggregate-coverage-summary.js <dir-with-artifacts> <out-file>`.
+Locally: `node scripts/generate-coverage-report.js <coverage-parts-dir> <out-dir>` (or `node scripts/aggregate-coverage-summary.js` if you only need merged JSON).
 
 ## CI: pull requests vs deploy (E2E)
 

@@ -86,4 +86,8 @@ function main() {
   console.log("Merged", files.length, "coverage-summary.json ->", outFile);
 }
 
-main();
+module.exports = { findSummaryFiles, mergeSummaries };
+
+if (require.main === module) {
+  main();
+}

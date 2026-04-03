@@ -35,7 +35,9 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm test -- --coverage
+        run: |
+          mkdir -p coverage
+          npm test -- --coverage 2>&1 | tee coverage/jest-coverage-log.txt
 
       - name: Append coverage summary to job summary
         if: always()
@@ -92,9 +94,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install lcov (genhtml)
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
       # Matrix legs may fail before upload; downloads use continue-on-error so we still merge partial inputs.
       - name: Download coverage-auth
         continue-on-error: true
@@ -131,58 +130,21 @@ jobs:
           name: coverage-e2e-runner
           path: coverage-parts/e2e-runner
 
-      - name: Merge LCOV and HTML report
-        run: |
-          set -euo pipefail
-          mkdir -p coverage-parts coverage-combined/lcov-report
-          COUNT=$(find coverage-parts -name lcov.info -type f | wc -l)
-          if [ "${COUNT}" -eq 0 ]; then
-            echo "::warning::No lcov.info inputs found under coverage-parts; skipping merged HTML."
-          else
-            npx --yes lcov-result-merger@5.0.1 "coverage-parts/**/lcov.info" merged.lcov
-            # Per-service SF paths are often relative (e.g. src/handler.ts); from repo root genhtml cannot open them.
-            # Combined report is overview-only (--no-source); open per-service coverage-* artifacts for line-level HTML.
-            genhtml merged.lcov -o coverage-combined/lcov-report --branch-coverage --no-source --ignore-errors source,category --quiet
-          fi
-
-      - name: Merge coverage-summary.json (platform totals)
+      - name: Generate combined coverage report (Markdown + JSON)
         run: |
           set -euo pipefail
           mkdir -p coverage-parts
-          if ! find coverage-parts -name coverage-summary.json -type f | grep -q .; then
-            echo "::warning::No coverage-summary.json under coverage-parts; skipping merged summary JSON."
-            mkdir -p coverage-combined
-            printf '%s\n' '{"total":{}}' > coverage-combined/coverage-summary.json
-          else
-            node scripts/aggregate-coverage-summary.js coverage-parts coverage-combined/coverage-summary.json
-          fi
+          node scripts/generate-coverage-report.js coverage-parts coverage-combined
 
-      - name: Append combined coverage to workflow summary
+      - name: Append combined coverage report to workflow summary
         if: always()
         run: |
-          node <<'NODE'
-          const fs = require("fs");
-          const p = "coverage-combined/coverage-summary.json";
-          if (!fs.existsSync(p)) process.exit(0);
-          const s = JSON.parse(fs.readFileSync(p, "utf8"));
-          const total = s.total || {};
-          const lines = [
-            "### Combined Jest coverage (all services)",
-            "",
-            "Per-service matrices above are unchanged; this table sums coverage across downloaded artifacts.",
-            "",
-            "| Metric | Covered |",
-            "| --- | --- |",
-          ];
-          for (const key of ["lines", "statements", "functions", "branches"]) {
-            const v = total[key];
-            if (v && typeof v.pct === "number") {
-              lines.push("| " + key + " | " + v.pct + "% |");
-            }
-          }
-          lines.push("");
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
-          NODE
+          if [ -f coverage-combined/COVERAGE-REPORT.md ]; then
+            {
+              echo ""
+              cat coverage-combined/COVERAGE-REPORT.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload combined coverage artifact
         if: always()
@@ -191,5 +153,6 @@ jobs:
           name: coverage-combined
           path: |
             coverage-combined/coverage-summary.json
-            coverage-combined/lcov-report
+            coverage-combined/COVERAGE-REPORT.md
+            coverage-combined/COVERAGE-REPORT.txt
           if-no-files-found: warn

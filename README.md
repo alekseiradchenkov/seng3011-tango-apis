@@ -101,6 +101,12 @@ The **test** workflow (`.github/workflows/test.yml`) runs Jest with coverage per
 
 Locally, merged summary JSON can be regenerated with `node scripts/aggregate-coverage-summary.js <dir-with-artifacts> <out-file>`.
 
+## CI: pull requests vs deploy (E2E)
+
+- **Pull requests** run the **test** workflow only (lint/unit tests per service, coverage aggregation). They do **not** deploy to AWS dev/prod.
+- The matrix job named **`e2e-runner`** runs **Jest** in `services/e2e-runner` (unit tests for the runner code). That is unrelated to invoking the deployed Lambda.
+- **Newman / HTTP E2E** against the real API runs only after a **successful deploy** in **`aws-deploy`** (push to `main` or manual workflow), which invokes the **E2E runner Lambda** in AWS.
+
 ## Per-Service Docker (Not Recommended)
 
 As per assessment requirements, per service docker containers have been created. However, the localStack deployment flow is the recommended path as it is far more robust and accurate. With our localstack flow, we deploy the stack through our CDK + CloudFormation flow using the localstack docker container in our [docker-compose.yml] file and we mock AWS infrastructure end-to-end (API Gateway, Lambda, DynamoDB, S3, Cognito, IAM, etc.).

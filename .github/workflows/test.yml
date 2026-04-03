@@ -140,7 +140,8 @@ jobs:
             echo "::warning::No lcov.info inputs found under coverage-parts; skipping merged HTML."
           else
             npx --yes lcov-result-merger@5.0.1 "coverage-parts/**/lcov.info" merged.lcov
-            genhtml merged.lcov -o coverage-combined/lcov-report --branch-coverage --ignore-errors source --quiet
+            # Merged LCOV can mix branch/line records (e.g. duplicate SF paths); genhtml needs category ignored too.
+            genhtml merged.lcov -o coverage-combined/lcov-report --branch-coverage --ignore-errors source,category --quiet
           fi
 
       - name: Merge coverage-summary.json (platform totals)

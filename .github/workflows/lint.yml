@@ -15,7 +15,7 @@ jobs:
       # Run all services in parallel; don't cancel others if one fails.
       fail-fast: false
       matrix:
-        service: [auth, collection, retrieval, visualisation]
+        service: [auth, collection, retrieval, visualisation, e2e-runner]
 
     defaults:
       run:

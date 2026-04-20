@@ -54,7 +54,10 @@ jobs:
 
       - name: Install service dependencies
         run: |
-          for svc in auth collection retrieval visualisation e2e-runner; do
+          # aws-lambda-nodejs local bundling runs `npx --no-install esbuild` with
+          # cwd set to each service's projectRoot. We must `npm ci` each service
+          # so `esbuild` (and other dev deps) are available locally.
+          for svc in auth collection retrieval visualisation predictive e2e-runner; do
             echo "Installing $svc..."
             npm ci --prefix "services/$svc"
           done
@@ -151,7 +154,8 @@ jobs:
 
       - name: Install service dependencies
         run: |
-          for svc in auth collection retrieval visualisation e2e-runner; do
+          # Keep prod in sync with dev (see note above).
+          for svc in auth collection retrieval visualisation predictive e2e-runner; do
             echo "Installing $svc..."
             npm ci --prefix "services/$svc"
           done

@@ -2,17 +2,76 @@
   "info": {
     "_postman_id": "b7f3a7c4-6d2d-4e9c-9b02-predictive-0006",
     "name": "Integration Test 6 — Predictive Risk Forecasting",
-    "description": "User Story: An analyst creates a dataset, ingests ~1 year of OHLC, trains a next-7-day volatility spike model, runs predictions, and (optionally) fetches the electricity shock overlay.\n\nNotes:\n- In LocalStack with AUTH_BYPASS=true, these requests use x-user-id instead of a Cognito JWT.\n- The electricity shock endpoint depends on the external GridX HuggingFace Space; the test tolerates 200 or 500.\n\nRun with Newman:\n  newman run integration-tests/integration-test-6.predictive.collection.json --env-var apiId=<YOUR_API_ID>",
+    "description": "User Story: An analyst creates a dataset, ingests ~1 year of OHLC, trains a next-7-day volatility spike model, runs predictions, and (optionally) fetches the electricity shock overlay.\n\nNotes:\n- In LocalStack with AUTH_BYPASS=true, these requests use x-user-id instead of a Cognito JWT.\n- In AWS deployments (AUTH_BYPASS disabled), this collection signs up/logs in and uses Authorization: Bearer <accessToken>.\n- The electricity shock endpoint depends on the external GridX HuggingFace Space; the test tolerates 200 or 500.\n\nRun with Newman:\n  newman run integration-tests/integration-test-6.predictive.collection.json --env-var apiId=<YOUR_API_ID>",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "apiId", "value": "77e5a0c0" },
     { "key": "baseUrl", "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
-    { "key": "userId", "value": "local-user" },
+    { "key": "email", "value": "testuser@example.com" },
+    { "key": "password", "value": "TestP@ssw0rd1!" },
+    { "key": "accessToken", "value": "" },
     { "key": "datasetId", "value": "" },
     { "key": "modelId", "value": "" }
   ],
   "item": [
+    {
+      "name": "0) Auth - Signup",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 201 or 409', function () {",
+              "  pm.expect([201, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "content-type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/signup"
+      }
+    },
+    {
+      "name": "0b) Auth - Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', json.accessToken);",
+              "pm.test('accessToken captured', function () {",
+              "  pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "content-type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
     {
       "name": "1) Create Dataset",
       "event": [
@@ -35,7 +94,7 @@
         "method": "POST",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "x-user-id", "value": "{{userId}}" }
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -69,7 +128,7 @@
         "method": "PUT",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "x-user-id", "value": "{{userId}}" }
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -104,7 +163,7 @@
         "method": "POST",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "x-user-id", "value": "{{userId}}" }
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -139,7 +198,7 @@
         "method": "POST",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "x-user-id", "value": "{{userId}}" }
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -174,11 +233,10 @@
       "request": {
         "method": "GET",
         "header": [
-          { "key": "x-user-id", "value": "{{userId}}" }
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
         ],
         "url": "{{baseUrl}}/predict/electricity-shock"
       }
     }
   ]
 }
-

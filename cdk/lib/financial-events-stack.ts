@@ -143,6 +143,28 @@ export class FinancialEventsStack extends Stack {
       },
     });
 
+    // Predictive Lambda (risk forecasting)
+    const predictiveFunction = new NodejsFunction(this, "PredictiveFunction", {
+      entry: path.join(__dirname, "..", "..", "services", "predictive", "src", "lambda.ts"),
+      depsLockFilePath: path.join(__dirname, "..", "..", "services", "predictive", "package-lock.json"),
+      runtime: LAMBDA_RUNTIME,
+      timeout: Duration.seconds(60),
+      memorySize: 1024,
+      bundling: {
+        nodeModules: ["@vendia/serverless-express", "aws-jwt-verify", "cors", "express", "morgan"],
+        externalModules: ["@aws-sdk/*"],
+      },
+      environment: {
+        EVENT_INDEX_TABLE: eventIndexTable.tableName,
+        EVENTS_BUCKET: eventsBucket.bucketName,
+        MANGO_BASE_URL: process.env.MANGO_BASE_URL ?? "https://x9rgu2z2vh.execute-api.us-east-1.amazonaws.com/prod",
+        GRIDX_HF_BASE_URL: process.env.GRIDX_HF_BASE_URL ?? "https://a13awd-electricity-grid-model.hf.space/gradio_api",
+        ...(allowAuthBypass ? { AUTH_BYPASS: "true" } : {}),
+        COGNITO_USER_POOL_ID: userPool.userPoolId,
+        COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
+      },
+    });
+
     // Auth Lambda
     const authFunction = new NodejsFunction(this, "AuthFunction", {
       entry: path.join(__dirname, "..", "..", "services", "auth", "src", "lambda.ts"),
@@ -191,10 +213,13 @@ export class FinancialEventsStack extends Stack {
     // Permissions
     eventIndexTable.grantReadWriteData(collectionFunction);
     eventIndexTable.grantReadData(retrievalFunction);
+    eventIndexTable.grantReadData(predictiveFunction);
 
     eventsBucket.grantReadWrite(collectionFunction);
     eventsBucket.grantRead(retrievalFunction);
     eventsBucket.grantRead(visualisationFunction);
+    // Predictive reads datasets and writes trained models into the same bucket under `models/`.
+    eventsBucket.grantReadWrite(predictiveFunction);
 
     // HTTP API
     const httpApi = new apigw.HttpApi(this, "FinancialEventsApi", {
@@ -204,6 +229,7 @@ export class FinancialEventsStack extends Stack {
     const collectionIntegration = new apigwIntegrations.HttpLambdaIntegration("CollectionIntegration", collectionFunction);
     const retrievalIntegration = new apigwIntegrations.HttpLambdaIntegration("RetrievalIntegration", retrievalFunction);
     const visualisationIntegration = new apigwIntegrations.HttpLambdaIntegration("VisualisationIntegration", visualisationFunction);
+    const predictiveIntegration = new apigwIntegrations.HttpLambdaIntegration("PredictiveIntegration", predictiveFunction);
     const authIntegration = new apigwIntegrations.HttpLambdaIntegration("AuthIntegration", authFunction);
     const docsIntegration = new apigwIntegrations.HttpLambdaIntegration("DocsIntegration", docsFunction);
 
@@ -287,6 +313,28 @@ export class FinancialEventsStack extends Stack {
       path: "/charts",
       methods: [apigw.HttpMethod.GET],
       integration: visualisationIntegration,
+    });
+
+    // Predictive routes (risk forecasting)
+    httpApi.addRoutes({
+      path: "/predict/models/train",
+      methods: [apigw.HttpMethod.POST],
+      integration: predictiveIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/predict/run",
+      methods: [apigw.HttpMethod.POST],
+      integration: predictiveIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/predict/electricity-shock",
+      methods: [apigw.HttpMethod.GET],
+      integration: predictiveIntegration,
+    });
+    httpApi.addRoutes({
+      path: "/predict/macro-summary",
+      methods: [apigw.HttpMethod.GET],
+      integration: predictiveIntegration,
     });
 
     const integrationTestsRoot = path.join(__dirname, "..", "..", "integration-tests");

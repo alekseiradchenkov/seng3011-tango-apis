@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, collection, retrieval, visualisation, e2e-runner]
+        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
 
     defaults:
       run:
@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, collection, retrieval, visualisation, e2e-runner]
+        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
 
     defaults:
       run:
@@ -178,6 +178,13 @@ jobs:
           name: coverage-e2e-runner
           path: coverage-parts/e2e-runner
 
+      - name: Download coverage-predictive
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-predictive
+          path: coverage-parts/predictive
+
       - name: Download lint-auth
         continue-on-error: true
         uses: actions/download-artifact@v4
@@ -212,6 +219,13 @@ jobs:
         with:
           name: lint-e2e-runner
           path: lint-parts/e2e-runner
+
+      - name: Download lint-predictive
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-predictive
+          path: lint-parts/predictive
 
       - name: Generate combined CI report (tests + coverage + lint)
         run: |

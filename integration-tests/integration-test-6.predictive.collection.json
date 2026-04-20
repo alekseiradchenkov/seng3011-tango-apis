@@ -1,0 +1,184 @@
+{
+  "info": {
+    "_postman_id": "b7f3a7c4-6d2d-4e9c-9b02-predictive-0006",
+    "name": "Integration Test 6 — Predictive Risk Forecasting",
+    "description": "User Story: An analyst creates a dataset, ingests ~1 year of OHLC, trains a next-7-day volatility spike model, runs predictions, and (optionally) fetches the electricity shock overlay.\n\nNotes:\n- In LocalStack with AUTH_BYPASS=true, these requests use x-user-id instead of a Cognito JWT.\n- The electricity shock endpoint depends on the external GridX HuggingFace Space; the test tolerates 200 or 500.\n\nRun with Newman:\n  newman run integration-tests/integration-test-6.predictive.collection.json --env-var apiId=<YOUR_API_ID>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiId", "value": "77e5a0c0" },
+    { "key": "baseUrl", "value": "http://localhost:4566/_aws/execute-api/{{apiId}}" },
+    { "key": "userId", "value": "local-user" },
+    { "key": "datasetId", "value": "" },
+    { "key": "modelId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1) Create Dataset",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create dataset: 201', function () {",
+              "  pm.expect(pm.response.code).to.equal(201);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('datasetId', json.dataset_id);",
+              "console.log('datasetId:', json.dataset_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Predictive Test Dataset\",\n  \"description\": \"1y OHLC for predictive model training\"\n}"
+        },
+        "url": "{{baseUrl}}/datasets"
+      }
+    },
+    {
+      "name": "2) Fetch 1y OHLC Events (Yahoo Finance)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('fetch events: 200', function () {",
+              "  pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('fetched some events', function () {",
+              "  pm.expect(json.count).to.be.a('number');",
+              "  pm.expect(json.count).to.be.greaterThan(50);",
+              "});",
+              "console.log('fetched count:', json.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"symbols\": [\"AAPL\", \"MSFT\", \"NVDA\"],\n  \"exchange\": \"XNAS\",\n  \"date_from\": \"2025-01-01\",\n  \"date_to\": \"2026-01-01\"\n}"
+        },
+        "url": "{{baseUrl}}/datasets/{{datasetId}}/events"
+      }
+    },
+    {
+      "name": "3) Train Predictive Model",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('train: 200', function () {",
+              "  pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('modelId', json.model_id);",
+              "pm.test('metrics present', function () {",
+              "  pm.expect(json.metrics).to.be.an('object');",
+              "  pm.expect(json.metrics.auc).to.be.a('number');",
+              "});",
+              "console.log('modelId:', json.model_id, 'auc:', json.metrics.auc);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dataset_id\": \"{{datasetId}}\",\n  \"horizon_days\": 7,\n  \"spike_threshold\": 0.05,\n  \"macro\": {\n    \"cpi_start\": \"2023-Q1\",\n    \"cpi_end\": \"2026-Q1\",\n    \"unemp_start\": \"2023-01\",\n    \"unemp_end\": \"2026-03\"\n  }\n}"
+        },
+        "url": "{{baseUrl}}/predict/models/train"
+      }
+    },
+    {
+      "name": "4) Run Predictions",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('predict: 200', function () {",
+              "  pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('predictions array returned', function () {",
+              "  pm.expect(json.predictions).to.be.an('array');",
+              "  pm.expect(json.predictions.length).to.be.greaterThan(0);",
+              "  pm.expect(json.predictions[0].p_spike_7d).to.be.a('number');",
+              "});",
+              "console.log('top prediction:', JSON.stringify(json.predictions[0]));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dataset_id\": \"{{datasetId}}\",\n  \"model_id\": \"{{modelId}}\",\n  \"grid_overlay\": {\n    \"enabled\": true,\n    \"grid_exposed_symbols\": [\"AAPL\", \"MSFT\"]\n  }\n}"
+        },
+        "url": "{{baseUrl}}/predict/run"
+      }
+    },
+    {
+      "name": "5) Electricity Shock Snapshot (Optional External Dependency)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('electricity shock: 200 or 500', function () {",
+              "  pm.expect([200, 500]).to.include(pm.response.code);",
+              "});",
+              "if (pm.response.code === 200) {",
+              "  const json = pm.response.json();",
+              "  pm.test('regions array present', function () {",
+              "    pm.expect(json.regions).to.be.an('array');",
+              "  });",
+              "} else {",
+              "  console.log('Electricity shock unavailable in this environment');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "url": "{{baseUrl}}/predict/electricity-shock"
+      }
+    }
+  ]
+}
+

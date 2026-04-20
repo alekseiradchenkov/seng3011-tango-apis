@@ -22,7 +22,8 @@
     { "name": "Auth", "description": "User signup, login, and logout via Cognito." },
     { "name": "Collection", "description": "Create/manage datasets and fetch/manage events." },
     { "name": "Retrieval", "description": "Retrieve datasets, events, and statistics." },
-    { "name": "Visualisation", "description": "Render charts from dataset events." }
+    { "name": "Visualisation", "description": "Render charts from dataset events." },
+    { "name": "Predictive", "description": "Train and run predictive risk models (volatility spike forecasting)." }
   ],
   "definitions": {
     "StatusResponse": {
@@ -196,6 +197,125 @@
           "additionalProperties": { "type": "integer" },
           "example": { "stock_ohlc": 120, "price_spike": 4 }
         }
+      }
+    },
+    "PredictTrainRequest": {
+      "type": "object",
+      "required": ["dataset_id"],
+      "properties": {
+        "dataset_id": { "type": "string", "example": "dataset_1741651200000_1" },
+        "horizon_days": { "type": "integer", "default": 7, "example": 7 },
+        "spike_threshold": { "type": "number", "default": 0.05, "example": 0.05 },
+        "symbols": { "type": "array", "items": { "type": "string" }, "example": ["AAPL.XNAS", "MSFT.XNAS"] },
+        "macro": {
+          "type": "object",
+          "required": ["cpi_start", "cpi_end", "unemp_start", "unemp_end"],
+          "properties": {
+            "cpi_start": { "type": "string", "example": "2023-Q1" },
+            "cpi_end": { "type": "string", "example": "2026-Q1" },
+            "unemp_start": { "type": "string", "example": "2023-01" },
+            "unemp_end": { "type": "string", "example": "2026-03" }
+          }
+        }
+      }
+    },
+    "PredictTrainResponse": {
+      "type": "object",
+      "required": ["model_id", "trained_at", "feature_list", "metrics"],
+      "properties": {
+        "model_id": { "type": "string", "example": "model_1713520000000_ab12cd34" },
+        "trained_at": { "type": "string", "format": "date-time" },
+        "feature_list": { "type": "array", "items": { "type": "string" } },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "auc": { "type": "number", "example": 0.63 },
+            "precision": { "type": "number", "example": 0.41 },
+            "recall": { "type": "number", "example": 0.57 }
+          }
+        }
+      }
+    },
+    "PredictRunRequest": {
+      "type": "object",
+      "required": ["dataset_id", "model_id"],
+      "properties": {
+        "dataset_id": { "type": "string", "example": "dataset_1741651200000_1" },
+        "model_id": { "type": "string", "example": "model_1713520000000_ab12cd34" },
+        "as_of_date": { "type": "string", "format": "date", "example": "2026-03-01" },
+        "use_mango": { "type": "boolean", "description": "Whether to use Mango macro indicators when scoring.", "example": true },
+        "grid_overlay": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "example": true },
+            "grid_exposed_symbols": { "type": "array", "items": { "type": "string" }, "example": ["ORG.AX", "AGL.AX"] }
+          }
+        }
+      }
+    },
+    "PredictRunResponse": {
+      "type": "object",
+      "required": ["as_of", "predictions"],
+      "properties": {
+        "as_of": { "type": "string", "format": "date", "example": "2026-03-01" },
+        "predictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["symbol", "p_spike_7d", "risk_level", "drivers"],
+            "properties": {
+              "symbol": { "type": "string", "example": "AAPL.XNAS" },
+              "p_spike_7d": { "type": "number", "example": 0.4213 },
+              "risk_level": { "type": "string", "enum": ["LOW", "ELEVATED", "HIGH", "CRITICAL"], "example": "ELEVATED" },
+              "drivers": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "PredictElectricityShockResponse": {
+      "type": "object",
+      "required": ["generated_at", "regions"],
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["region", "current_price", "price_30m", "shock_score", "level"],
+            "properties": {
+              "region": { "type": "string", "example": "NSW1" },
+              "current_price": { "type": "number", "example": 75.2 },
+              "price_30m": { "type": "number", "example": 92.1 },
+              "shock_score": { "type": "number", "example": 0.08 },
+              "level": { "type": "string", "enum": ["LOW", "ELEVATED", "HIGH", "CRITICAL"], "example": "HIGH" }
+            }
+          }
+        }
+      }
+    },
+    "PredictMacroSummaryResponse": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string", "example": "Mango API" },
+        "cpi_latest": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "example": "2026-03-31" },
+            "value": { "type": "number", "example": 138.2 },
+            "change": { "type": "number", "example": 0.011 }
+          }
+        },
+        "unemp_latest": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "example": "2026-03-31" },
+            "value": { "type": "number", "example": 4.2 },
+            "change": { "type": "number", "example": 0.1 }
+          }
+        },
+        "error": { "type": "string", "example": "Missing environment variable: MANGO_BASE_URL" }
       }
     },
     "DatasetListResponse": {
@@ -585,6 +705,70 @@
           "200": { "description": "PNG image of the candlestick chart", "schema": { "type": "file" } },
           "400": { "description": "Missing dataset_id or no valid OHLC points", "schema": { "$ref": "#/definitions/ErrorResponse" } },
           "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/predict/models/train": {
+      "post": {
+        "tags": ["Predictive"],
+        "summary": "Train a volatility spike risk model",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/PredictTrainRequest" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Model trained", "schema": { "$ref": "#/definitions/PredictTrainResponse" } },
+          "400": { "description": "Invalid request", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "404": { "description": "Dataset not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/predict/run": {
+      "post": {
+        "tags": ["Predictive"],
+        "summary": "Run a trained model and return per-symbol risk probabilities",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/PredictRunRequest" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Predictions returned", "schema": { "$ref": "#/definitions/PredictRunResponse" } },
+          "400": { "description": "Invalid request", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "404": { "description": "Dataset/model not found", "schema": { "$ref": "#/definitions/ErrorResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/predict/electricity-shock": {
+      "get": {
+        "tags": ["Predictive"],
+        "summary": "Get GridX near-term electricity price shock scores (normalised)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Electricity shock snapshot", "schema": { "$ref": "#/definitions/PredictElectricityShockResponse" } },
+          "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
+        }
+      }
+    },
+    "/predict/macro-summary": {
+      "get": {
+        "tags": ["Predictive"],
+        "summary": "Get Mango macro summary used by predictive models",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Macro summary", "schema": { "$ref": "#/definitions/PredictMacroSummaryResponse" } },
           "500": { "description": "Server error", "schema": { "$ref": "#/definitions/ErrorResponse" } }
         }
       }

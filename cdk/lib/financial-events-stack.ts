@@ -202,6 +202,7 @@ export class FinancialEventsStack extends Stack {
       new iam.PolicyStatement({
         actions: [
           "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminDeleteUser",
           "cognito-idp:AdminSetUserPassword",
           "cognito-idp:AdminInitiateAuth",
           "cognito-idp:GlobalSignOut",

@@ -7,6 +7,7 @@
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
+  AdminDeleteUserCommand,
   AdminSetUserPasswordCommand,
   AdminInitiateAuthCommand,
   GlobalSignOutCommand,
@@ -68,14 +69,27 @@ export async function signup(email: string, password: string) {
     }),
   );
 
-  await client.send(
-    new AdminSetUserPasswordCommand({
-      UserPoolId: userPoolId,
-      Username: email,
-      Password: password,
-      Permanent: true,
-    }),
-  );
+  try {
+    await client.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: email,
+        Password: password,
+        Permanent: true,
+      }),
+    );
+  } catch (err) {
+    await client
+      .send(
+        new AdminDeleteUserCommand({
+          UserPoolId: userPoolId,
+          Username: email,
+        }),
+      )
+      .catch(() => undefined);
+
+    throw err;
+  }
 }
 
 /**

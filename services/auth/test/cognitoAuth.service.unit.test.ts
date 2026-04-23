@@ -15,6 +15,12 @@ jest.mock("@aws-sdk/client-cognito-identity-provider", () => ({
       this.input = input;
     }
   },
+  AdminDeleteUserCommand: class AdminDeleteUserCommand {
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  },
   AdminSetUserPasswordCommand: class AdminSetUserPasswordCommand {
     input: unknown;
     constructor(input: unknown) {
@@ -52,6 +58,30 @@ describe("cognitoAuth.service", () => {
     sendMock.mockResolvedValue({});
     await signup("u@test.com", "Secret123!");
     expect(sendMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("signup deletes the created user when setting password fails", async () => {
+    const err = Object.assign(new Error("Password does not conform to policy"), {
+      name: "InvalidPasswordException",
+    });
+    sendMock.mockResolvedValueOnce({}).mockRejectedValueOnce(err).mockResolvedValueOnce({});
+
+    await expect(signup("u@test.com", "weak")).rejects.toThrow(/Password does not conform/);
+    expect(sendMock).toHaveBeenCalledTimes(3);
+    expect(sendMock.mock.calls[2][0].constructor.name).toBe("AdminDeleteUserCommand");
+  });
+
+  it("signup preserves the password error even if rollback delete fails", async () => {
+    const passwordErr = Object.assign(new Error("Password does not conform to policy"), {
+      name: "InvalidPasswordException",
+    });
+    sendMock
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(passwordErr)
+      .mockRejectedValueOnce(new Error("delete failed"));
+
+    await expect(signup("u@test.com", "weak")).rejects.toThrow(/Password does not conform/);
+    expect(sendMock).toHaveBeenCalledTimes(3);
   });
 
   it("login returns tokens", async () => {

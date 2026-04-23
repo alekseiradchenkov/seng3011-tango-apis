@@ -39,6 +39,14 @@ describe("auth routes", () => {
     expect(res.status).toBe(409);
   });
 
+  it("POST /auth/signup 400 InvalidPasswordException", async () => {
+    const err = Object.assign(new Error("Password does not conform to policy"), { name: "InvalidPasswordException" });
+    signup.mockRejectedValue(err);
+    const res = await request(app).post("/auth/signup").send({ email: "a@b.com", password: "pw" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("INVALID_PASSWORD");
+  });
+
   it("POST /auth/signup 500 other error", async () => {
     signup.mockRejectedValue(new Error("boom"));
     const res = await request(app).post("/auth/signup").send({ email: "a@b.com", password: "pw" });

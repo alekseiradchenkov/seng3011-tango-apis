@@ -27,6 +27,13 @@ router.post("/signup", async (req: Request, res: Response) => {
       });
       return;
     }
+    if (code === "InvalidPasswordException") {
+      res.status(400).json({
+        error: "INVALID_PASSWORD",
+        message: String((err as { message?: string })?.message ?? "Password does not meet policy requirements."),
+      });
+      return;
+    }
 
     res.status(500).json({
       error: "AUTH_SIGNUP_FAILED",
@@ -85,4 +92,3 @@ router.post("/logout", async (req: Request, res: Response) => {
 });
 
 export default router;
-

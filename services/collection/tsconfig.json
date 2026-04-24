@@ -2,6 +2,11 @@
   "compilerOptions": {
     "target": "es2017",
     "module": "commonjs",
+    "baseUrl": ".",
+    "paths": {
+      "aws-jwt-verify": ["node_modules/aws-jwt-verify"],
+      "express": ["node_modules/@types/express"]
+    },
     "esModuleInterop": true,
     "allowJs": true,
     "checkJs": true,
@@ -10,6 +15,7 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "types": ["node", "express"],
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],

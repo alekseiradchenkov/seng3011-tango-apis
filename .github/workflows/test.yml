@@ -1,4 +1,4 @@
-name: test
+name: backend-ci
 
 on:
   pull_request:
@@ -50,6 +50,36 @@ jobs:
           name: lint-${{ matrix.service }}
           path: services/${{ matrix.service }}/lint
           if-no-files-found: warn
+
+  typecheck:
+    name: "typecheck-${{ matrix.service }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type-check
+        run: npm run tsc -- --noEmit
 
   test:
     name: "${{ matrix.service }}"
@@ -128,7 +158,7 @@ jobs:
 
   coverage-aggregate:
     name: coverage-combined
-    needs: [test, lint]
+    needs: [test, lint, typecheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -241,6 +271,21 @@ jobs:
               echo ""
               cat coverage-combined/COMBINED-CI-REPORT.md
             } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail aggregate job if any validation job failed
+        if: always()
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [ "${LINT_RESULT}" != "success" ] || [ "${TYPECHECK_RESULT}" != "success" ] || [ "${TEST_RESULT}" != "success" ]; then
+            echo "At least one backend validation job failed."
+            echo "lint=${LINT_RESULT}"
+            echo "typecheck=${TYPECHECK_RESULT}"
+            echo "test=${TEST_RESULT}"
+            exit 1
           fi
 
       - name: Upload combined CI artifact

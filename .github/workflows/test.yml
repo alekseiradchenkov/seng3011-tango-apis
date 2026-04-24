@@ -8,17 +8,11 @@ on:
 
 jobs:
   lint:
-    name: "lint-${{ matrix.service }}"
+    name: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
-
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
+    timeout-minutes: 20
+    env:
+      SERVICES: auth collection retrieval visualisation predictive e2e-runner
 
     steps:
       - name: Checkout
@@ -29,40 +23,50 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+          cache-dependency-path: |
+            services/auth/package-lock.json
+            services/collection/package-lock.json
+            services/retrieval/package-lock.json
+            services/visualisation/package-lock.json
+            services/predictive/package-lock.json
+            services/e2e-runner/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: ESLint (JSON report for combined CI summary)
+      - name: Run ESLint for all microservices
+        shell: bash
         run: |
-          mkdir -p lint
-          set +e
-          npm run lint -- -f json -o lint/eslint-report.json
-          echo $? > lint/eslint.exitcode
-          set -e
-          exit "$(cat lint/eslint.exitcode)"
+          set -uo pipefail
+          failed=0
+          mkdir -p lint-parts
+          for svc in ${SERVICES}; do
+            echo "==> Linting ${svc}"
+            mkdir -p "lint-parts/${svc}"
+            (
+              cd "services/${svc}"
+              npm ci
+              set +e
+              npm run lint -- -f json -o "../../lint-parts/${svc}/eslint-report.json"
+              status=$?
+              set -e
+              echo "${status}" > "../../lint-parts/${svc}/eslint.exitcode"
+              exit "${status}"
+            ) || failed=1
+          done
+          exit "${failed}"
 
-      - name: Upload lint report artifact
+      - name: Upload lint report artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lint-${{ matrix.service }}
-          path: services/${{ matrix.service }}/lint
+          name: lint-parts
+          path: lint-parts
           if-no-files-found: warn
 
   typecheck:
-    name: "typecheck-${{ matrix.service }}"
+    name: typecheck
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
-
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
+    timeout-minutes: 20
+    env:
+      SERVICES: auth collection retrieval visualisation predictive e2e-runner
 
     steps:
       - name: Checkout
@@ -73,87 +77,114 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+          cache-dependency-path: |
+            services/auth/package-lock.json
+            services/collection/package-lock.json
+            services/retrieval/package-lock.json
+            services/visualisation/package-lock.json
+            services/predictive/package-lock.json
+            services/e2e-runner/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: TypeScript type-check
-        run: npm run tsc -- --noEmit
-
-  test:
-    name: "${{ matrix.service }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [auth, collection, retrieval, visualisation, predictive, e2e-runner]
-
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests with coverage
+      - name: Run type-check for all microservices
         shell: bash
         run: |
-          mkdir -p coverage
-          set -o pipefail
-          npm test -- --coverage --json --outputFile=coverage/jest-results.json 2>&1 | tee coverage/jest-coverage-log.txt
-          echo ${PIPESTATUS[0]} > coverage/jest.exitcode
-          exit "$(cat coverage/jest.exitcode)"
+          set -uo pipefail
+          failed=0
+          for svc in ${SERVICES}; do
+            echo "==> Type-checking ${svc}"
+            (
+              cd "services/${svc}"
+              npm ci
+              npm run tsc -- --noEmit
+            ) || failed=1
+          done
+          exit "${failed}"
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SERVICES: auth collection retrieval visualisation predictive e2e-runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            services/auth/package-lock.json
+            services/collection/package-lock.json
+            services/retrieval/package-lock.json
+            services/visualisation/package-lock.json
+            services/predictive/package-lock.json
+            services/e2e-runner/package-lock.json
+
+      - name: Run tests with coverage for all microservices
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=0
+          mkdir -p coverage-parts
+          for svc in ${SERVICES}; do
+            echo "==> Testing ${svc}"
+            mkdir -p "coverage-parts/${svc}"
+            (
+              cd "services/${svc}"
+              npm ci
+              mkdir -p coverage
+              set +e
+              npm test -- --coverage --json --outputFile=coverage/jest-results.json 2>&1 | tee "../../coverage-parts/${svc}/jest-coverage-log.txt"
+              status=${PIPESTATUS[0]}
+              set -e
+              cp -R coverage/. "../../coverage-parts/${svc}/" 2>/dev/null || true
+              echo "${status}" > "../../coverage-parts/${svc}/jest.exitcode"
+              exit "${status}"
+            ) || failed=1
+          done
+          exit "${failed}"
 
       - name: Append coverage summary to job summary
         if: always()
-        working-directory: services/${{ matrix.service }}
-        env:
-          SVC_NAME: ${{ matrix.service }}
+        shell: bash
         run: |
-          node <<'NODE'
-          const fs = require("fs");
-          const p = "coverage/coverage-summary.json";
-          if (!fs.existsSync(p)) {
-            console.log("No coverage/coverage-summary.json");
-            process.exit(0);
-          }
-          const s = JSON.parse(fs.readFileSync(p, "utf8"));
-          const total = s.total || {};
-          const lines = [
-            "### Jest coverage: " + process.env.SVC_NAME,
-            "",
-            "| Metric | Covered |",
-            "| --- | --- |",
-          ];
-          for (const key of ["lines", "statements", "functions", "branches"]) {
-            const v = total[key];
-            if (v && typeof v.pct === "number") {
-              lines.push("| " + key + " | " + v.pct + "% |");
+          for svc in ${SERVICES}; do
+            SVC_NAME="${svc}" node <<'NODE'
+            const fs = require("fs");
+            const p = `coverage-parts/${process.env.SVC_NAME}/coverage-summary.json`;
+            if (!fs.existsSync(p)) {
+              console.log(`No ${p}`);
+              process.exit(0);
             }
-          }
-          lines.push("");
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
-          NODE
+            const s = JSON.parse(fs.readFileSync(p, "utf8"));
+            const total = s.total || {};
+            const lines = [
+              "### Jest coverage: " + process.env.SVC_NAME,
+              "",
+              "| Metric | Covered |",
+              "| --- | --- |",
+            ];
+            for (const key of ["lines", "statements", "functions", "branches"]) {
+              const v = total[key];
+              if (v && typeof v.pct === "number") {
+                lines.push("| " + key + " | " + v.pct + "% |");
+              }
+            }
+            lines.push("");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
+NODE
+          done
 
-      - name: Upload coverage artifact
+      - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.service }}
-          path: services/${{ matrix.service }}/coverage
+          name: coverage-parts
+          path: coverage-parts
           if-no-files-found: warn
 
   coverage-aggregate:
@@ -172,90 +203,19 @@ jobs:
         with:
           node-version: "20"
 
-      # Matrix legs may fail before upload; downloads use continue-on-error so we still merge partial inputs.
-      - name: Download coverage-auth
+      - name: Download coverage artifacts
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: coverage-auth
-          path: coverage-parts/auth
+          name: coverage-parts
+          path: coverage-parts
 
-      - name: Download coverage-collection
+      - name: Download lint artifacts
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          name: coverage-collection
-          path: coverage-parts/collection
-
-      - name: Download coverage-retrieval
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-retrieval
-          path: coverage-parts/retrieval
-
-      - name: Download coverage-visualisation
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-visualisation
-          path: coverage-parts/visualisation
-
-      - name: Download coverage-e2e-runner
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-e2e-runner
-          path: coverage-parts/e2e-runner
-
-      - name: Download coverage-predictive
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-predictive
-          path: coverage-parts/predictive
-
-      - name: Download lint-auth
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-auth
-          path: lint-parts/auth
-
-      - name: Download lint-collection
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-collection
-          path: lint-parts/collection
-
-      - name: Download lint-retrieval
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-retrieval
-          path: lint-parts/retrieval
-
-      - name: Download lint-visualisation
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-visualisation
-          path: lint-parts/visualisation
-
-      - name: Download lint-e2e-runner
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-e2e-runner
-          path: lint-parts/e2e-runner
-
-      - name: Download lint-predictive
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: lint-predictive
-          path: lint-parts/predictive
+          name: lint-parts
+          path: lint-parts
 
       - name: Generate combined CI report (tests + coverage + lint)
         run: |

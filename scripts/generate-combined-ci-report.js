@@ -21,6 +21,7 @@ const SERVICE_ORDER = /** @type {const} */ ([
   "collection",
   "retrieval",
   "visualisation",
+  "predictive",
   "e2e-runner",
 ]);
 

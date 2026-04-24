@@ -176,7 +176,7 @@ jobs:
             }
             lines.push("");
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
-            NODE
+          NODE
           done
 
       - name: Upload coverage artifacts
@@ -188,7 +188,7 @@ jobs:
           if-no-files-found: warn
 
   coverage-aggregate:
-    name: coverage-combined
+    name: testing-report
     needs: [test, lint, typecheck]
     if: always()
     runs-on: ubuntu-latest
@@ -221,15 +221,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p coverage-parts lint-parts
-          node scripts/generate-combined-ci-report.js coverage-parts lint-parts coverage-combined
+          node scripts/generate-combined-ci-report.js coverage-parts lint-parts testing-report
 
       - name: Append combined CI report to workflow summary
         if: always()
         run: |
-          if [ -f coverage-combined/COMBINED-CI-REPORT.md ]; then
+          if [ -f testing-report/COMBINED-CI-REPORT.md ]; then
             {
               echo ""
-              cat coverage-combined/COMBINED-CI-REPORT.md
+              cat testing-report/COMBINED-CI-REPORT.md
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -252,11 +252,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-combined
+          name: testing-report
           path: |
-            coverage-combined/coverage-summary.json
-            coverage-combined/COMBINED-CI-REPORT.md
-            coverage-combined/COMBINED-CI-REPORT.txt
-            coverage-combined/COVERAGE-REPORT.md
-            coverage-combined/COVERAGE-REPORT.txt
+            testing-report/coverage-summary.json
+            testing-report/COMBINED-CI-REPORT.md
+            testing-report/COMBINED-CI-REPORT.txt
+            testing-report/COVERAGE-REPORT.md
+            testing-report/COVERAGE-REPORT.txt
           if-no-files-found: warn

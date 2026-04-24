@@ -15,7 +15,7 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
-    "types": ["node", "express"],
+    "types": ["node", "express", "jest"],
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],

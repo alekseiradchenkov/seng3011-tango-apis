@@ -176,7 +176,7 @@ jobs:
             }
             lines.push("");
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
-NODE
+            NODE
           done
 
       - name: Upload coverage artifacts
